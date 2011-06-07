@@ -39,14 +39,15 @@ define([ "require", "jquery", "blade/object", "blade/fn", "rdapi", "oauth",
         "blade/jig", "blade/url", "dispatch", "accounts",
          "storage", "services", "widgets/AccountPanel", "widgets/TabButton",
          "widgets/AddAccount", "less", "osTheme", "jquery-ui-1.8.7.min",
-         "jquery.textOverflow"],
+         "jquery.textOverflow", "jschannel",
+         "fakeStorage" // XXX - don't want this, but it is a long story... :)
+         ],
 function (require,   $,        object,         fn,         rdapi,   oauth,
           jig,         url,        dispatch,   accounts,
           storage,   services,   AccountPanel,           TabButton,
           AddAccount,           less,   osTheme) {
 
-  var actions = services.domains,
-    onFirstShareState = null,
+  var onFirstShareState = null,
     accountPanels = {},
     store = storage(),
     SHARE_DONE = 0,
@@ -64,7 +65,9 @@ function (require,   $,        object,         fn,         rdapi,   oauth,
     refreshInterval = 1 * 24 * 60 * 60 * 1000,
 
     options, bodyDom, sendData, tabButtonsDom,
-    servicePanelsDom;
+    servicePanelsDom,
+    owaservices = [], // A list of {app, channel, characteristics}
+    owaservicesbydomain = {}; // A map version of the above - XXX - should probably not be by_domain.
 
   //Start processing of less files right away.
   require(['text!style/' + osTheme + '.css', 'text!style.css'],
@@ -210,8 +213,8 @@ function (require,   $,        object,         fn,         rdapi,   oauth,
         doubleSlashIndex = url.indexOf("//") + 2;
     $('#statusShared').empty().append(jig('#sharedTemplate', {
       domain: siteName || url.slice(doubleSlashIndex, url.indexOf("/", doubleSlashIndex)),
-      service: actions[sendDomain].name,
-      href: actions[sendDomain].serviceUrl
+      service: owaservicesbydomain[sendDomain].app.manifest.name,
+      href: owaservicesbydomain[sendDomain].app.url
     })).find('.shareTitle').textOverflow(null, true);
     showStatus('statusShared', true);
   }
@@ -249,6 +252,14 @@ function (require,   $,        object,         fn,         rdapi,   oauth,
     if (data.message) {
       data.message = data.message.replace(/http\:\/\/bit\.ly\/XXXXXX/, '');
     }
+    // does nothing yet!
+    var channel = owaservicesbydomain[sendData.domain].channel;
+    channel.call({
+            method: "confirm",
+            params: sendData,
+            success: function() {dump("SEND said it worked!!");},
+            error: function(error, message) {dump("SEND FAILURE: " + error + "/" + message + "\n");}
+            });
 
     rdapi('send', {
       type: 'POST',
@@ -273,7 +284,7 @@ function (require,   $,        object,         fn,         rdapi,   oauth,
         } else if (json.error) {
           showStatus('statusError', json.error.message);
         } else {
-          store.set('lastSelection', actions[sendData.domain].type);
+          store.set('lastSelection', owaservicesbydomain[sendData.domain].characteristics.type);
           showStatusShared();
           //Be sure to delete sessionRestore data
           for (prop in accountPanels) {
@@ -411,7 +422,7 @@ function (require,   $,        object,         fn,         rdapi,   oauth,
 
           // Add the AddAccount UI to the DOM/tab list.
           addAccountWidget = new AddAccount({
-            id: 'addAccount'
+            id: 'addAccount', owaservices: owaservices
           }, fragment);
 
           // add the tabs and tab contents now
@@ -455,48 +466,55 @@ function (require,   $,        object,         fn,         rdapi,   oauth,
             return;
           }
 
-          var domain = account.profile.accounts[0].domain,
-              type = actions[domain].type,
+          var domain = account.profile.accounts[0].domain;
+          var thisSvc;
+          if (domain && owaservicesbydomain[domain]) {
+            thisSvc = owaservicesbydomain[domain];
+          }
+
+          if (!thisSvc || !thisSvc.characteristics || !thisSvc.characteristics.type) { /* phew! */
+            // must be an old account for a removed/failing webmod.
+            return;
+          }
+          var type = thisSvc.characteristics.type,
               data, PanelCtor;
 
-          if (domain && actions[domain]) {
-            //Make sure to see if there is a match for last selection
-            if (type === lastSelection) {
-              lastSelectionMatch = i;
+          //Make sure to see if there is a match for last selection
+          if (type === lastSelection) {
+            lastSelectionMatch = i;
+          }
+
+          data = thisSvc.characteristics;
+          data.domain = domain;
+
+          if (accountPanels[domain]) {
+            accountPanels[domain].addAccount(account);
+          } else {
+
+            // Add a tab button for the service.
+            tabsDom.append(new TabButton({
+              target: type,
+              type: type,
+              title: owaservicesbydomain[domain].app.manifest.name
+            }, tabFragment));
+
+            // Get the contructor function for the panel.
+            PanelCtor = require(panelOverlayMap[domain] || 'widgets/AccountPanel');
+
+            accountPanel = new PanelCtor({
+              options: options,
+              accounts: [account],
+              svc: data
+            }, fragment);
+
+            // if an async creation, then wait until all are created before
+            // proceeding with UI construction.
+            if (accountPanel.asyncCreate) {
+              asyncCount += 1;
+              accountPanel.asyncCreate.then(finishCreate);
             }
 
-            data = actions[domain];
-            data.domain = domain;
-
-            if (accountPanels[domain]) {
-              accountPanels[domain].addAccount(account);
-            } else {
-
-              // Add a tab button for the service.
-              tabsDom.append(new TabButton({
-                target: type,
-                type: type,
-                title: actions[domain].name
-              }, tabFragment));
-
-              // Get the contructor function for the panel.
-              PanelCtor = require(panelOverlayMap[domain] || 'widgets/AccountPanel');
-
-              accountPanel = new PanelCtor({
-                options: options,
-                accounts: [account],
-                svc: data
-              }, fragment);
-
-              // if an async creation, then wait until all are created before
-              // proceeding with UI construction.
-              if (accountPanel.asyncCreate) {
-                asyncCount += 1;
-                accountPanel.asyncCreate.then(finishCreate);
-              }
-
-              accountPanels[domain] = accountPanel;
-            }
+            accountPanels[domain] = accountPanel;
           }
 
           i++;
@@ -532,7 +550,7 @@ function (require,   $,        object,         fn,         rdapi,   oauth,
       }
 
       var domain = account.profile.accounts[0].domain,
-          overlays = actions[domain].overlays,
+          overlays = owaservicesbydomain[domain] ? owaservicesbydomain[domain].characteristics.overlays : null,
           overlay = overlays && overlays['widgets/AccountPanel'];
       if (overlay && !processedDomains[domain]) {
         panelOverlays.push(overlay);
@@ -634,21 +652,130 @@ function (require,   $,        object,         fn,         rdapi,   oauth,
         return;
       }
 
-      //Fetch the accounts.
-      accounts(
-        updateAccounts,
-
-        //Error handler for account fetch
-        function (xhr, textStatus, err) {
-          if (xhr.status === 503) {
-            showStatus('statusServerBusyClose');
-          } else {
-            showStatus('statusServerError', err);
-          }
-        }
-      );
     });
   };
+
+  function _fetchAndUpdateAccounts() {
+    // called after we have all the OWA services setup, when we need to look
+    // inside storage and see which ones we actually have accounts for.
+    accounts(updateAccounts,
+      //Error handler for account fetch
+      function (xhr, textStatus, err) {
+        dump("Failed to fetch accounts from storage.");
+        if (xhr.status === 503) {
+          showStatus('statusServerBusyClose');
+        } else {
+          showStatus('statusServerError', err);
+        }
+      }
+    );
+  };
+
+  /* Not used, and not clear exactly when we need to do this! */
+  function _deleteOldServices() {
+    // first the channels
+    while (owaservices.length) {
+      var svcRec = owaservices.pop();
+      svcRec.channel.destroy();
+    }
+    owaservicesbydomain = {};
+    $("#frame-garage").empty();// this will remove iframes from DOM
+  };
+
+  function _createChannels(requestMethod, requestArguments) {
+    // XX we shouldn't be creating all the channels at once
+    for (var i = 0; i < owaservices.length; i++)
+    {
+      var svcRec = owaservices[i];
+      try {
+        var anIframe = document.getElementById("svc-frame-" + i);
+
+        var chan = Channel.build({
+            window: anIframe.contentWindow,
+            origin: svcRec.app.url,
+            scope: "openwebapps_conduit"
+        });
+        
+        chan.call({
+            method: requestMethod,
+            params: requestArguments,
+            success: function() {}, /* perhaps record the fact that it worked? */
+            error: (function() {return function(error, message) {
+              // XXX - what is this error handler trying to do???
+              var messageData = {cmd:"error", error:error, msg:message};
+              var msg = document.createEvent("MessageEvent");
+              msg.initMessageEvent("message", // type
+                                   true, true, // bubble, cancelable
+                                   JSON.stringify(messageData),  // data
+                                   "resource://openwebapps/service", "", window); // origin, source
+              document.dispatchEvent(msg);
+            }}())
+        });
+        svcRec.channel = chan;
+      } catch (e) {
+        dump("Warning: unable to create channel to " + svcRec.app.url + ": " + e + "\n");
+      }
+    }
+  };
+
+  window.addEventListener("message", function(evt) {
+    // Make sure we only act on messages from "ourself" (actually, they come
+    // from OWA, but it sets the origin to our window...)
+    if (window.location.href.indexOf(evt.origin) === 0) {
+      var message = evt.data, topic, data;
+      try {
+        // Only some messages are valid JSON, only care about the ones
+        // that are.
+        message = JSON.parse(message);
+      } catch (e) {
+        dump("share panel ignoring non-json message");
+        return;
+      }
+      if (message.cmd === "setup") {
+        // Sent by OWA after it has created the iframes.
+        message.serviceList.forEach(function(app) {
+          var svcRec = {app: app};
+          owaservices.push(svcRec);
+        });
+        var requestMethod = message.method;
+        var requestArgs = message.args;
+      /* XXX - strange - don't get the start_channels even though OWA's
+        services.js sends this immediately after 'setup'!!!
+      } else if (message.cmd === "start_channels") {
+      *****/
+        _createChannels(requestMethod, requestArgs);
+        // use the newly created channels to get the characteristics for
+        // each owa service.
+        for (var index = 0; index < owaservices.length; index++) {
+          // new function scope so we get a closure on index.
+          var numComplete = 0; // this seems suspect!?!?  How else to do it when all have returned?
+          var setupElement = function(i) {
+            var ch = owaservices[i].channel;
+            ch.call({
+              method: "link.send.getCharacteristics",
+              success: function(result) {
+                owaservices[i].characteristics = result;
+                numComplete += 1;
+                owaservicesbydomain[result.domain] = owaservices[i];
+                
+                if (numComplete === owaservices.length) {
+                  _fetchAndUpdateAccounts();
+                }
+              },
+              error: function(err) {
+                dump("failed to get owa characteristics: " + err + "\n");
+                numComplete += 1
+                if (numComplete === owaservices.length) {
+                  _fetchAndUpdateAccounts();
+                }
+              }
+            });
+          };
+          setupElement(index);
+        }
+      }
+    }
+  }, false);
 
   // Trigger a call for the first share state.
   dispatch.pub('panelReady', null);

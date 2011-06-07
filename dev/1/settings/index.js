@@ -28,7 +28,8 @@
 
 define([ "require", "jquery", "blade/fn", "rdapi", "oauth", "blade/jig",
          "dispatch", "storage", "accounts", "blade/url",
-         "services", "osTheme", "jquery.textOverflow"],
+         "services", "osTheme", "jquery.textOverflow",
+         "fakeStorage"], // XXX - don't want this, but it is a long story... :)
 function (require,   $,        fn,         rdapi,   oauth,   jig,
           dispatch,   storage,   accounts,   url,
           services) {

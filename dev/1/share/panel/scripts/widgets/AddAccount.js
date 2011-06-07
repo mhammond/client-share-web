@@ -25,10 +25,10 @@
 /*global define: false, document: false, alert: false */
 "use strict";
 
-define([ 'blade/object', 'blade/fn', 'blade/Widget', 'jquery', 'services',
+define([ 'blade/object', 'blade/fn', 'blade/Widget', 'jquery',
          'storage', 'module', 'dispatch', 'Select', 'oauth',
          'text!./AddAccount.html'],
-function (object,         fn,         Widget,         $,        services,
+function (object,         fn,         Widget,         $,
           storage,   module,   dispatch,   Select,   oauth,
           template) {
 
@@ -47,11 +47,10 @@ function (object,         fn,         Widget,         $,        services,
 
         var options = [{name: 'Select type', value: ''}];
 
-        services.domainList.forEach(function (domain) {
-          var svc = services.domains[domain];
+        this.owaservices.forEach(function (owasvc) {
           options.push({
-            name: svc.name,
-            value: domain
+            name: owasvc.app.manifest.name,
+            value: owasvc.characteristics.domain
           });
         });
 
