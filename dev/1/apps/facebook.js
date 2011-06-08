@@ -82,6 +82,12 @@ function (require,   $,       rdapi,
             ***/
         };
       });
+      chan.bind("link.send.getLogin", function(t, args) {
+        t.delayReturn(true); // we finish in the async callback.
+        common.getLogin("facebook.com", function(result) {
+            t.complete(result);
+        });
+      });
     } catch(e) {
       // thrown by jschannel...
       if (e !== 'target window is same as present window -- not allowed') {

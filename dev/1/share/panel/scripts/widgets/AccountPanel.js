@@ -52,8 +52,9 @@ function (object,         Widget,         $,        template,
    * This widget assumes its member variables include the following objects:
    *
    * options: the options for the URL/page being shared.
-   * account: the account returned from /account/get
-   * svc: The share service config, from services module.
+   * owaservice: the owa service record (ie, with 'channel', 'characteristics',
+   *             'login' etc elements).
+   * svc: The share service characteristics (from owaservice)
    */
   return object(Widget, null, function (parent) {
     return {
@@ -69,17 +70,14 @@ function (object,         Widget,         $,        template,
       // The module name for the Contacts module
       contactsName: 'Contacts',
 
-      addAccount: function (account) {
-        this.accounts.push(account);
-      },
-
       onCreate: function (onAsynCreateDone) {
-        var profile = this.accounts[0].profile,
+        var profile = this.owaservice.login.user,
             onFinishCreate = this.makeCreateCallback(),
             name;
 
         //Set up the svcAccount property
-        this.svcAccount = profile.accounts[0];
+        this.svcAccount = profile;
+        this.svc = this.owaservice.characteristics;
         this.storeId = 'AccountPanel-' + this.svcAccount.domain;
 
         //Set up memory store for when user switches tabs, their messages for

@@ -26,9 +26,9 @@
   document: false, setTimeout: false, localStorage: false */
 "use strict";
 
-define([ "require", "jquery", "rdapi", "oauth",
+define([ "require", "jquery", "rdapi", "accounts",
          "jquery-ui-1.8.6.custom.min"],
-function (require,   $,       rdapi,   oauth) {
+function (require,   $,       rdapi,   accounts) {
 
   var common = function() {
     
@@ -37,6 +37,36 @@ function (require,   $,       rdapi,   oauth) {
     send: function(data) {
       dump("CALLED common send!");
       throw "oh no!";
+    },
+
+    getLogin: function(domain, callback) {
+      accounts(function(accounts) {
+        var result;
+        accounts.forEach(function (account) {
+          // protect against old style account data
+          if (typeof(account.profile) === 'undefined') {
+            return;
+          }
+          var acct = account.profile.accounts[0];
+          if (!result && acct.domain === domain) {
+            // Turn the nested object into a flat one with profile and info all in one.
+            var retUser = {};
+            for (var attr in account.profile) {
+              if (account.profile.hasOwnProperty(attr)) retUser[attr] = account.profile[attr];
+            }
+            for (var attr in acct) {
+              if (acct.hasOwnProperty(attr)) retUser[attr] = acct[attr];
+            }
+            delete retUser.accounts;
+            result = {user: retUser};
+          }
+        });
+        if (!result) {
+          var url = 'http://linkdrop.caraveo.com:5000/dev/auth.html?domain=' + encodeURIComponent(domain);
+          result = {login: {dialog: url}};
+        }
+        callback(result);
+      });
     }
   }
   return new common();

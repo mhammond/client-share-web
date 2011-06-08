@@ -26,10 +26,10 @@
 "use strict";
 
 define([ 'blade/object', 'blade/fn', 'blade/Widget', 'jquery',
-         'storage', 'module', 'dispatch', 'Select', 'oauth',
+         'storage', 'module', 'dispatch', 'Select',
          'text!./AddAccount.html'],
 function (object,         fn,         Widget,         $,
-          storage,   module,   dispatch,   Select,   oauth,
+          storage,   module,   dispatch,   Select,
           template) {
 
   var className = module.id.replace(/\//g, '-'),
@@ -46,11 +46,10 @@ function (object,         fn,         Widget,         $,
         //has a problem with native selects.
 
         var options = [{name: 'Select type', value: ''}];
-
-        this.owaservices.forEach(function (owasvc) {
+        this.owaservices.forEach(function(owasvc, i) {
           options.push({
             name: owasvc.app.manifest.name,
-            value: owasvc.characteristics.domain
+            value: i.toString()
           });
         });
 
@@ -62,18 +61,14 @@ function (object,         fn,         Widget,         $,
         //Listen for changes
         this.select.dom.bind('change', fn.bind(this, function (evt) {
 
-          var selectionName = this.select.val();
-          if (selectionName) {
-            oauth(this.select.val(), true, function (success) {
-              if (success) {
-                //Make sure to bring the user back to this service if
-                //the auth is successful.
-                store.set('lastSelection', selectionName);
-              } else {
-                //TODO: Fix.
-                alert('Login Failed.');
-              }
-            });
+          var index = this.select.val();
+          if (typeof(index) !== 'undefined') {
+            var thisService = this.owaservices[index],
+                url = thisService.login.login.dialog,
+                win = window.open(url,
+                  "ffshareOAuth",
+                  "dialog=yes, modal=yes, width=900, height=500, scrollbars=yes");
+            win.focus();
           }
         }));
       }

@@ -37,14 +37,13 @@
 
 define([ "require", "jquery", "blade/object", "blade/fn", "rdapi", "oauth",
         "blade/jig", "blade/url", "dispatch", "accounts",
-         "storage", "services", "widgets/AccountPanel", "widgets/TabButton",
+         "storage",  "widgets/AccountPanel", "widgets/TabButton",
          "widgets/AddAccount", "less", "osTheme", "jquery-ui-1.8.7.min",
          "jquery.textOverflow", "jschannel",
-         "fakeStorage" // XXX - don't want this, but it is a long story... :)
          ],
 function (require,   $,        object,         fn,         rdapi,   oauth,
           jig,         url,        dispatch,   accounts,
-          storage,   services,   AccountPanel,           TabButton,
+          storage,   AccountPanel,           TabButton,
           AddAccount,           less,   osTheme) {
 
   var onFirstShareState = null,
@@ -66,7 +65,7 @@ function (require,   $,        object,         fn,         rdapi,   oauth,
 
     options, bodyDom, sendData, tabButtonsDom,
     servicePanelsDom,
-    owaservices = [], // A list of {app, channel, characteristics}
+    owaservices = [], // A list of {app, iframe, channel, characteristics}
     owaservicesbydomain = {}; // A map version of the above - XXX - should probably not be by_domain.
 
   //Start processing of less files right away.
@@ -120,7 +119,7 @@ function (require,   $,        object,         fn,         rdapi,   oauth,
           username: sendData.username,
           userid: sendData.userid,
           url: options.url,
-          service: services.domains[sendData.domain].name
+          service: owaservicesbydomain[sendData.domain].app.manifest.name
         });
         $('div.status').addClass('hidden');
       }, 2000);
@@ -332,7 +331,7 @@ function (require,   $,        object,         fn,         rdapi,   oauth,
       accounts.getService(data.domain, data.userid, data.username,
         function (svcData) {
 
-          var svcConfig = services.domains[data.domain],
+          var svcConfig = owaservicesbydomain[data.domain].characteristics,
               shortenData;
 
           sendData.account = JSON.stringify(svcData);
@@ -383,7 +382,7 @@ function (require,   $,        object,         fn,         rdapi,   oauth,
   /**
    * Shows the accounts after any AccountPanel overlays have been loaded.
    */
-  function displayAccounts(accounts, panelOverlayMap) {
+  function displayAccounts(panelOverlayMap) {
     var lastSelectionMatch = 0,
         tabsDom = $('#tabs'),
         tabContentDom = $('#tabContent'),
@@ -460,20 +459,14 @@ function (require,   $,        object,         fn,         rdapi,   oauth,
         }
 
         //Figure out what accounts we do have
-        accounts.forEach(function (account) {
-          // protect against old style account data
-          if (typeof(account.profile) === 'undefined') {
+        owaservices.forEach(function (thisSvc) {
+          // may have failed to offer login info, or may be logged out - skip them
+          if (!thisSvc.login || !thisSvc.login.user) {
             return;
           }
-
-          var domain = account.profile.accounts[0].domain;
-          var thisSvc;
-          if (domain && owaservicesbydomain[domain]) {
-            thisSvc = owaservicesbydomain[domain];
-          }
-
-          if (!thisSvc || !thisSvc.characteristics || !thisSvc.characteristics.type) { /* phew! */
-            // must be an old account for a removed/failing webmod.
+          var domain = thisSvc.login.user.domain;
+          if (!thisSvc.characteristics || !thisSvc.characteristics.type) {
+            // must be an old account or a removed/failing webmod.
             return;
           }
           var type = thisSvc.characteristics.type,
@@ -488,14 +481,15 @@ function (require,   $,        object,         fn,         rdapi,   oauth,
           data.domain = domain;
 
           if (accountPanels[domain]) {
-            accountPanels[domain].addAccount(account);
+            dump("EEEK - no concept of multiple accts per service!\n");
+            // accountPanels[domain].addService(thisSvc);
           } else {
 
             // Add a tab button for the service.
             tabsDom.append(new TabButton({
               target: type,
               type: type,
-              title: owaservicesbydomain[domain].app.manifest.name
+              title: thisSvc.app.manifest.name
             }, tabFragment));
 
             // Get the contructor function for the panel.
@@ -503,8 +497,7 @@ function (require,   $,        object,         fn,         rdapi,   oauth,
 
             accountPanel = new PanelCtor({
               options: options,
-              accounts: [account],
-              svc: data
+              owaservice: thisSvc
             }, fragment);
 
             // if an async creation, then wait until all are created before
@@ -532,25 +525,23 @@ function (require,   $,        object,         fn,         rdapi,   oauth,
     });
   }
 
-  function updateAccounts(accounts) {
+  function updateAccounts() {
     var panelOverlays = [],
         panelOverlayMap = {},
         //Only do one overlay request per domain. This can be removed
         //when requirejs is updated to 0.23.0 or later.
         processedDomains = {};
 
-    accounts = accounts || [];
-
     //Collect any UI overrides used for AccountPanel based on the services
     //the user has configured.
-    accounts.forEach(function (account) {
-      // protect against old style account data
-      if (typeof(account.profile) === 'undefined') {
+    owaservices.forEach(function (owaservice) {
+      // may have failed to offer login info, or may be logged out - skip them
+      if (!owaservice.login || !owaservice.login.user) {
         return;
       }
-
-      var domain = account.profile.accounts[0].domain,
-          overlays = owaservicesbydomain[domain] ? owaservicesbydomain[domain].characteristics.overlays : null,
+      var account = owaservice.login.user;
+      var domain = account.domain,
+          overlays = owaservice.characteristics.overlays,
           overlay = overlays && overlays['widgets/AccountPanel'];
       if (overlay && !processedDomains[domain]) {
         panelOverlays.push(overlay);
@@ -561,12 +552,11 @@ function (require,   $,        object,         fn,         rdapi,   oauth,
 
     if (panelOverlays.length) {
       require(panelOverlays, function () {
-        displayAccounts(accounts, panelOverlayMap);
+        displayAccounts(panelOverlayMap);
       });
     } else {
-      displayAccounts(accounts, panelOverlayMap);
+      displayAccounts(panelOverlayMap);
     }
-
   }
 
   // Set up initialization work for the first share state passing.
@@ -656,19 +646,34 @@ function (require,   $,        object,         fn,         rdapi,   oauth,
   };
 
   function _fetchAndUpdateAccounts() {
-    // called after we have all the OWA services setup, when we need to look
-    // inside storage and see which ones we actually have accounts for.
-    accounts(updateAccounts,
-      //Error handler for account fetch
-      function (xhr, textStatus, err) {
-        dump("Failed to fetch accounts from storage.");
-        if (xhr.status === 503) {
-          showStatus('statusServerBusyClose');
-        } else {
-          showStatus('statusServerError', err);
-        }
-      }
-    );
+    // called after we have all the OWA services setup and the characteristics.
+    // Now ask them for the current login information.
+    for (var index = 0; index < owaservices.length; index++) {
+      // new function scope so we get a closure on index.
+      var numComplete = 0; // this seems suspect!?!?  How else to do it when all have returned?
+      var setupElement = function(i) {
+        var ch = owaservices[i].channel;
+        ch.call({
+          method: "link.send.getLogin",
+          success: function(result) {
+            owaservices[i].login = result;
+            numComplete += 1;
+            owaservicesbydomain[result.domain] = owaservices[i];
+            if (numComplete === owaservices.length) {
+              updateAccounts();
+            }
+          },
+          error: function(err, message) {
+            dump("failed to get owa login info: " + err + ": " + message + "\n");
+            numComplete += 1
+            if (numComplete === owaservices.length) {
+              updateAccounts();
+            }
+          }
+        });
+      };
+      setupElement(index);
+    }
   };
 
   /* Not used, and not clear exactly when we need to do this! */
@@ -688,10 +693,8 @@ function (require,   $,        object,         fn,         rdapi,   oauth,
     {
       var svcRec = owaservices[i];
       try {
-        var anIframe = document.getElementById("svc-frame-" + i);
-
         var chan = Channel.build({
-            window: anIframe.contentWindow,
+            window: svcRec.iframe.contentWindow,
             origin: svcRec.app.url,
             scope: "openwebapps_conduit"
         });
@@ -733,8 +736,10 @@ function (require,   $,        object,         fn,         rdapi,   oauth,
       }
       if (message.cmd === "setup") {
         // Sent by OWA after it has created the iframes.
-        message.serviceList.forEach(function(app) {
-          var svcRec = {app: app};
+        message.serviceList.forEach(function(svc, index) {
+          var svcRec = {app: svc,
+                        iframe: document.getElementById("svc-frame-" + index)
+          }
           owaservices.push(svcRec);
         });
         var requestMethod = message.method;
@@ -746,33 +751,28 @@ function (require,   $,        object,         fn,         rdapi,   oauth,
         _createChannels(requestMethod, requestArgs);
         // use the newly created channels to get the characteristics for
         // each owa service.
-        for (var index = 0; index < owaservices.length; index++) {
-          // new function scope so we get a closure on index.
-          var numComplete = 0; // this seems suspect!?!?  How else to do it when all have returned?
-          var setupElement = function(i) {
-            var ch = owaservices[i].channel;
-            ch.call({
-              method: "link.send.getCharacteristics",
-              success: function(result) {
-                owaservices[i].characteristics = result;
-                numComplete += 1;
-                owaservicesbydomain[result.domain] = owaservices[i];
-                
-                if (numComplete === owaservices.length) {
-                  _fetchAndUpdateAccounts();
-                }
-              },
-              error: function(err) {
-                dump("failed to get owa characteristics: " + err + "\n");
-                numComplete += 1
-                if (numComplete === owaservices.length) {
-                  _fetchAndUpdateAccounts();
-                }
+        var numComplete = 0; // this seems suspect!?!?  How else to do it when all have returned?
+        owaservices.forEach(function(thisSvc) {
+          var ch = thisSvc.channel;
+          ch.call({
+            method: "link.send.getCharacteristics",
+            success: function(result) {
+              thisSvc.characteristics = result;
+              numComplete += 1;
+              owaservicesbydomain[result.domain] = thisSvc;
+              if (numComplete === owaservices.length) {
+                _fetchAndUpdateAccounts();
               }
-            });
-          };
-          setupElement(index);
-        }
+            },
+            error: function(err) {
+              dump("failed to get owa characteristics: " + err + "\n");
+              numComplete += 1
+              if (numComplete === owaservices.length) {
+                _fetchAndUpdateAccounts();
+              }
+            }
+          });
+        });
       }
     }
   }, false);
