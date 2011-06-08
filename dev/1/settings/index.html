@@ -24,6 +24,12 @@
         priority: ['fakeStorage']
       });
     }
+    // XXX - need to fixup the storage story for when this code is running
+    // as an extension (fakeStorage is *not* needed when this code is
+    // embedded into firefox...
+    require({
+      priority: ['fakeStorage']
+    });
     require(['/dev/1/settings/index.js']);
 
   </script>
