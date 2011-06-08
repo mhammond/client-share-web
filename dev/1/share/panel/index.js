@@ -35,13 +35,13 @@
 
 */
 
-define([ "require", "jquery", "blade/object", "blade/fn", "rdapi", "oauth",
+define([ "require", "jquery", "blade/object", "blade/fn", "oauth",
         "blade/jig", "blade/url", "dispatch", "accounts",
          "storage",  "widgets/AccountPanel", "widgets/TabButton",
          "widgets/AddAccount", "less", "osTheme", "jquery-ui-1.8.7.min",
          "jquery.textOverflow", "jschannel",
          ],
-function (require,   $,        object,         fn,         rdapi,   oauth,
+function (require,   $,        object,         fn,         oauth,
           jig,         url,        dispatch,   accounts,
           storage,   AccountPanel,           TabButton,
           AddAccount,           less,   osTheme) {
@@ -251,70 +251,56 @@ function (require,   $,        object,         fn,         rdapi,   oauth,
     if (data.message) {
       data.message = data.message.replace(/http\:\/\/bit\.ly\/XXXXXX/, '');
     }
-    // does nothing yet!
+    // XXX - this needs lots of work - the values we work with are specific
+    // to the F1 backend implementation and not really suitable as a general
+    // api.
     var channel = owaservicesbydomain[sendData.domain].channel;
     channel.call({
-            method: "confirm",
-            params: sendData,
-            success: function() {dump("SEND said it worked!!");},
-            error: function(error, message) {dump("SEND FAILURE: " + error + "/" + message + "\n");}
-            });
-
-    rdapi('send', {
-      type: 'POST',
-      domain: sendData.domain,
-      data: data,
-      success: function (json) {
+      method: "confirm",
+      params: sendData,
+      success: function() {
+        dump("send success!")
+        var prop;
         // {'message': u'Status is a duplicate.', 'provider': u'twitter.com'}
-        var code, prop;
-        if (json.error && json.error.status) {
-          code = json.error.status;
-          // XXX need to find out what error codes everyone uses
-          // oauth+smtp will return a 535 on authentication failure
-          if (code ===  401 || code === 535) {
-            reAuth();
-          } else if (json.error.code === 'Client.HumanVerificationRequired') {
-            handleCaptcha(json.error.detail);
-          } else if (json.error.code === 'Client.WrongInput') {
-            handleCaptcha(json.error.detail, json.error);
-          } else {
-            showStatus('statusError', json.error.message);
+        store.set('lastSelection', owaservicesbydomain[sendData.domain].characteristics.type);
+        showStatusShared();
+        //Be sure to delete sessionRestore data
+        for (prop in accountPanels) {
+          if (accountPanels.hasOwnProperty(prop)) {
+            accountPanels[prop].clearSavedData();
           }
-        } else if (json.error) {
-          showStatus('statusError', json.error.message);
-        } else {
-          store.set('lastSelection', owaservicesbydomain[sendData.domain].characteristics.type);
-          showStatusShared();
-          //Be sure to delete sessionRestore data
-          for (prop in accountPanels) {
-            if (accountPanels.hasOwnProperty(prop)) {
-              accountPanels[prop].clearSavedData();
-            }
-          }
-
-          // notify on successful send for components that want to do
-          // work, like save any new contacts.
-          dispatch.pub('sendComplete', sendData);
         }
+        // notify on successful send for components that want to do
+        // work, like save any new contacts.
+        dispatch.pub('sendComplete', sendData);
       },
-      error: function (xhr, textStatus, err) {
-        if (xhr.status === 403) {
-          //header error will be "CSRF" if missing CSRF token. This usually
-          //means we lost all our cookies, or the server lost our session.
-          //We could get more granular, to try to distinguish CSRF missing
-          //token from just missing other cookine info, but in practice,
-          //it is hard to see how that might happen -- either all the cookies
-          //are gone or they are all there.
-          //var headerError = xhr.getResponseHeader('X-Error');
+      error: function(error, message) {
+        dump("SEND FAILURE: " + error + "/" + message + "\n");
+        message = JSON.parse(message);
+        if (error === 'authentication') {
           reAuth();
-        } else if (xhr.status === 503) {
-          dispatch.pub('serverErrorPossibleRetry', {
-            xhr: xhr
-          });
-        } else if (xhr.status === 0) {
-          showStatus('statusServerError');
+        } else if (error === 'captcha') {
+          handleCaptcha(message[0], message[1]);
+        } else if (error === 'http_error') {
+          var status = message;
+          if (status === 403) {
+            //header error will be "CSRF" if missing CSRF token. This usually
+            //means we lost all our cookies, or the server lost our session.
+            //We could get more granular, to try to distinguish CSRF missing
+            //token from just missing other cookine info, but in practice,
+            //it is hard to see how that might happen -- either all the cookies
+            //are gone or they are all there.
+            //var headerError = xhr.getResponseHeader('X-Error');
+            reAuth();
+          } else if (status === 503) {
+            dispatch.pub('serverErrorPossibleRetry');
+          } else if (status === 0) {
+            showStatus('statusServerError');
+          } else {
+            showStatus('statusError', message); // XXX - need better default msg??
+          }
         } else {
-          showStatus('statusError', err);
+          showStatus('statusError', message);
         }
       }
     });
@@ -572,7 +558,7 @@ function (require,   $,        object,         fn,         rdapi,   oauth,
       // Listen for 503 errors, could be a retry call, but for
       // now, just show server error until better feedback is
       // worked out in https://bugzilla.mozilla.org/show_bug.cgi?id=642653
-      dispatch.sub('serverErrorPossibleRetry', function (data) {
+      dispatch.sub('serverErrorPossibleRetry', function () {
         showStatus('statusServerBusy');
       });
 

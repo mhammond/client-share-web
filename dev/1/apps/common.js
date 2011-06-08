@@ -34,9 +34,38 @@ function (require,   $,       rdapi,   accounts) {
     
   };
   common.prototype = {
-    send: function(data) {
-      dump("CALLED common send!");
-      throw "oh no!";
+    send: function(t, data) {
+      t.delayReturn(true); // we finish in the async callback.
+      // Do the send!
+      rdapi('send', {
+        type: 'POST',
+        domain: data.domain,
+        data: data,
+        success: function (json) {
+          if (json.error && json.error.status) {
+            code = json.error.status;
+            // XXX need to find out what error codes everyone uses
+            // oauth+smtp will return a 535 on authentication failure
+            if (code ===  401 || code === 535) {
+              t.error("authentication");
+            } else if (json.error.code === 'Client.HumanVerificationRequired') {
+              t.error("captcha", [json.error.detail, null])
+            } else if (json.error.code === 'Client.WrongInput') {
+              t.error("captcha", [json.error.detail, json.error])
+            } else {
+              t.error("error", json.error.message)
+            }
+          } else if (json.error) {
+            t.error("error", json.error.message)
+          } else {
+            // it worked!
+            t.complete(json);
+          }
+        },
+        error: function (xhr, textStatus, err) {
+          t.error("http_error", xhr.status);
+        }
+      });
     },
 
     getLogin: function(domain, callback) {

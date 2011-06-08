@@ -37,10 +37,9 @@ function (require,   $,       rdapi,
     // Bind the OWA messages
     try {
       var chan = Channel.build({window: window.parent, origin: "*", scope: "openwebapps_conduit"});
-      chan.bind("confirm", function(t, args) {
-        // Do the send!
-        dump("channel.confirm with args: " + args + "!\n");
-        common.send()
+      chan.bind("confirm", function(t, data) {
+        dump("channel.confirm with args: " + data + "!\n");
+        common.send(t, data);
       });
       chan.bind("link.send", function(t, args) {
         dump("got link.send connection\n");
