@@ -241,8 +241,7 @@
 
   </style>
   <script>
-    // ack - these relative versioned paths seem strange!
-    require(["require", "jquery", "blade/url", "../1/scripts/services", "../1/scripts/jquery.cookie"],
+    require(["require", "jquery", "blade/url", "services", "jquery.cookie"],
     function (require,   $,        url,         services) {
       var target = window.location.href.split('#')[1];
       if (target && (target === 'oauth_success' || target === 'oauth_failure')) {
