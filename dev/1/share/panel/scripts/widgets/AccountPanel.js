@@ -42,6 +42,9 @@ function (object,         Widget,         $,        template,
       .delegate('.' + className + ' form.messageForm', 'submit', function (evt) {
         Widget.closest(module.id, evt, 'onSubmit');
       })
+      .delegate('.remove', 'click', function (evt) {
+        Widget.closest(module.id, evt, 'onRemove');
+      })
       .delegate('.' + className + ' [name="to"]', 'blur', function (evt) {
         Widget.closest(module.id, evt, 'validateTo');
       });
@@ -90,8 +93,6 @@ function (object,         Widget,         $,        template,
         //and the account match
         store.get(this.storeId, fn.bind(this, function (savedOptions) {
           if (savedOptions) {
-            savedOptions = JSON.parse(savedOptions);
-
             if (this.theGameHasChanged(savedOptions)) {
               this.clearSavedData();
               savedOptions = null;
@@ -488,6 +489,12 @@ function (object,         Widget,         $,        template,
 
         //Notify the page of a send.
         dispatch.pub('sendMessage', sendData);
+      },
+
+      onRemove: function (evt) {
+        //Notify the page of a send.
+        var sendData = this.getFormData();
+        dispatch.pub('logout', sendData.domain);
       }
     };
   });

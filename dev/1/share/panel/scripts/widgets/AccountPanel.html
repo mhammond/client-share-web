@@ -14,8 +14,9 @@
         <input type="hidden" name="medium" value="{options.medium}" />
         <input type="hidden" name="source" value="{options.source}" />
       {]}
-      <img class="avatar" src="{profilePic(svcAccount.profile.photos)}">
+      <img class="avatar" src="{profilePic(svcAccount.photos)}">
       <span class="username">{displayName}</span>
+      <a class="remove" href="#">logout</a>
     </div>
     <div class="message boxFlex addressing">
       {lt(svc.shareTypes.length, 2)[}
