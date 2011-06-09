@@ -64,7 +64,7 @@ function (object,         fn,         Widget,         $,
           var index = this.select.val();
           if (typeof(index) !== 'undefined') {
             var thisService = this.owaservices[index],
-                url = thisService.login.login.dialog,
+                url = thisService.app.app + thisService.login.login.dialog,
                 win = window.open(url,
                   "ffshareOAuth",
                   "dialog=yes, modal=yes, width=900, height=500, scrollbars=yes");
