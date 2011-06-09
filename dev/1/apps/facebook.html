@@ -24,16 +24,7 @@
 <html>
 <head>
   <title>Facebook via F1 OWA</title>
-  <script src="/dev/1/scripts/requireplugins-jquery.js" charset="utf-8"></script>
-  <script>
-    // XXX - need to fixup the storage story for when this code is running
-    // as an extension (fakeStorage is *not* needed when this code is
-    // embedded into firefox...
-    require({
-      priority: ['fakeStorage']
-    });
-    require(['facebook.js']);
-  </script>
+  <script data-main="facebook.js" src="/dev/1/scripts/requireplugins-jquery.js" charset="utf-8"></script>
 
 </head>
 

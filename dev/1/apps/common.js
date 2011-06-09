@@ -26,9 +26,9 @@
   document: false, setTimeout: false, localStorage: false */
 "use strict";
 
-define([ "require", "jquery", "rdapi", "accounts",
+define([ "require", "jquery", "rdapi",
          "jquery-ui-1.8.6.custom.min"],
-function (require,   $,       rdapi,   accounts) {
+function (require,   $,       rdapi) {
 
   var common = function() {
     
@@ -36,6 +36,12 @@ function (require,   $,       rdapi,   accounts) {
   common.prototype = {
     send: function(t, data) {
       t.delayReturn(true); // we finish in the async callback.
+      // first we need to "graft" the account data with the send data.
+      var key = "ff-share-" + data.domain;
+      var strval = window.localStorage.getItem(key);
+      if (strval) {
+        data.account = strval;
+      }
       // Do the send!
       rdapi('send', {
         type: 'POST',
@@ -43,7 +49,7 @@ function (require,   $,       rdapi,   accounts) {
         data: data,
         success: function (json) {
           if (json.error && json.error.status) {
-            code = json.error.status;
+            var code = json.error.status;
             // XXX need to find out what error codes everyone uses
             // oauth+smtp will return a 535 on authentication failure
             if (code ===  401 || code === 535) {
@@ -68,35 +74,35 @@ function (require,   $,       rdapi,   accounts) {
       });
     },
 
-    getLogin: function(domain, callback) {
-      accounts(function(accounts) {
-        var result;
-        accounts.forEach(function (account) {
-          // protect against old style account data
-          if (typeof(account.profile) === 'undefined') {
-            return;
-          }
-          var acct = account.profile.accounts[0];
-          if (!result && acct.domain === domain) {
-            // Turn the nested object into a flat one with profile and info all in one.
-            var retUser = {};
-            for (var attr in account.profile) {
-              if (account.profile.hasOwnProperty(attr)) retUser[attr] = account.profile[attr];
-            }
-            for (var attr in acct) {
-              if (acct.hasOwnProperty(attr)) retUser[attr] = acct[attr];
-            }
-            delete retUser.accounts;
-            result = {user: retUser};
-          }
-        });
-        if (!result) {
-          var url = 'http://linkdrop.caraveo.com:5000/dev/auth.html?domain=' + encodeURIComponent(domain);
-          result = {login: {dialog: url}};
+    getLogin: function(t, domain) {
+      var key = "ff-share-" + domain;
+      var strval = window.localStorage.getItem(key);
+      var result = {};
+      if (strval) {
+        var raw = JSON.parse(strval);
+        // Turn the nested object into a flat one with profile and info all in one,
+        // as required by the OWA APIs.
+        var acct = raw.profile.accounts[0];
+        var retUser = {};
+        for (var attr in raw.profile) {
+          if (raw.profile.hasOwnProperty(attr)) retUser[attr] = raw.profile[attr];
         }
-        callback(result);
-      });
+        for (var attr in acct) {
+          if (acct.hasOwnProperty(attr)) retUser[attr] = acct[attr];
+        }
+        result.user = retUser;
+      } else {
+        var url = '/dev/1/auth.html?domain=' + encodeURIComponent(domain);
+        result.login = {dialog: url};
+      }
+      return result;
+    },
+
+    logout: function(t, domain) {
+      var key = "ff-share-" + domain;
+      window.localStorage.removeItem(key);
     }
   }
+
   return new common();
 });
