@@ -35,14 +35,14 @@
 
 */
 
-define([ "require", "jquery", "blade/object", "blade/fn", "oauth",
-        "blade/jig", "blade/url", "dispatch", "accounts",
+define([ "require", "jquery", "blade/object", "blade/fn",
+        "blade/jig", "blade/url", "dispatch",
          "storage",  "widgets/AccountPanel", "widgets/TabButton",
          "widgets/AddAccount", "less", "osTheme", "jquery-ui-1.8.7.min",
          "jquery.textOverflow", "jschannel",
          ],
-function (require,   $,        object,         fn,         oauth,
-          jig,         url,        dispatch,   accounts,
+function (require,   $,        object,         fn,
+          jig,         url,        dispatch,
           storage,   AccountPanel,           TabButton,
           AddAccount,           less,   osTheme) {
 
@@ -90,7 +90,7 @@ function (require,   $,        object,         fn,         oauth,
     //Ask extension to generate base64 data if none available.
     //Useful for sending previews in email.
     var preview = options.previews && options.previews[0];
-    if (accounts.length && preview && preview.http_url && !preview.base64) {
+    if (preview && preview.http_url && !preview.base64) {
       dispatch.pub('generateBase64Preview', preview.http_url);
     }
   }
@@ -185,6 +185,7 @@ function (require,   $,        object,         fn,         oauth,
         } else {
           //clear all status, but if settings config needs to be shown, show it.
           cancelStatus();
+/* XXX - what is this doing??
           accounts(
             function (accts) {
               if (!accts || !accts.length) {
@@ -194,6 +195,7 @@ function (require,   $,        object,         fn,         oauth,
               tabButtonsDom.eq(0).click();
             }
           );
+***/
         }
 
         //Tell the extension that the size of the content may have changed.
@@ -276,7 +278,6 @@ function (require,   $,        object,         fn,         oauth,
       },
       error: function(error, message) {
         dump("SEND FAILURE: " + error + "/" + message + "\n");
-        message = JSON.parse(message);
         if (error === 'authentication') {
           reAuth();
         } else if (error === 'captcha') {
@@ -313,14 +314,8 @@ function (require,   $,        object,         fn,         oauth,
 
     // get any shortener prefs before trying to send.
     store.get('shortenPrefs', function (shortenPrefs) {
-
-      accounts.getService(data.domain, data.userid, data.username,
-        function (svcData) {
-
           var svcConfig = owaservicesbydomain[data.domain].characteristics,
               shortenData;
-
-          sendData.account = JSON.stringify(svcData);
 
           // hide the panel now, but only if the extension can show status
           // itself (0.7.7 or greater)
@@ -360,8 +355,6 @@ function (require,   $,        object,         fn,         oauth,
           } else {
             callSendApi();
           }
-        }
-      );
     });
   }
 
@@ -555,6 +548,22 @@ function (require,   $,        object,         fn,         oauth,
         sendMessage(data);
       });
 
+      dispatch.sub('logout', function (domain) {
+        var svcRec = owaservicesbydomain[domain];
+        svcRec.channel.call({
+          method: "link.send.logout",
+          success: function(result) {
+            dump("logout worked\n");
+            location.reload();
+          },
+          error: function(err, message) {
+            dump("failed to logout: " + err + ": " + message + "\n");
+            // may as well update the accounts anyway incase it really did work!
+            location.reload();
+          }
+        });
+      });
+
       // Listen for 503 errors, could be a retry call, but for
       // now, just show server error until better feedback is
       // worked out in https://bugzilla.mozilla.org/show_bug.cgi?id=642653
@@ -600,14 +609,37 @@ function (require,   $,        object,         fn,         oauth,
         });
 
       $('#authOkButton').click(function (evt) {
-        oauth(sendData.domain, false, function (success) {
-          if (success) {
-            accounts.clear();
-            accounts();
-          } else {
+        // just incase the service doesn't detect the logout automatically
+        // (ie, incase it returns the stale user info), force a logout.
+        var svcRec = owaservicesbydomain[sendData.domain];
+        // apparently must create the window here, before we do the channel
+        // stuff to avoid it being blocked.
+        var win = window.open("",
+          "ffshareOAuth",
+          "dialog=yes, modal=yes, width=900, height=500, scrollbars=yes");
+        svcRec.channel.call({
+          method: 'link.send.logout',
+          params: sendData.domain,
+          success: function() {
+            _fetchLoginInfo([svcRec], function() {
+              if (!svcRec.login || !svcRec.login.login || !svcRec.login.login.dialog) {
+                dump("Eeek - didn't get a login URL back from the service\n");
+                showStatus('statusOAuthFailed');
+                win.close();
+                return;
+              }
+              var url = svcRec.app.app + svcRec.login.login.dialog;
+              win.location = url;
+              win.focus();
+            });
+          },
+          error: function(err, message) {
+            dump("Service logout failed: " + err + "/" + message + "\n");
             showStatus('statusOAuthFailed');
+            win.close();
           }
         });
+        return false;
       });
 
       $('#captchaButton').click(function (evt) {
@@ -618,10 +650,6 @@ function (require,   $,        object,         fn,         oauth,
         sendMessage(sendData);
       });
 
-      //Set up default handler for account changes triggered from other
-      //windows, or updates to expired cache.
-      accounts.onChange();
-
       //Only bother with localStorage enabled storage.
       if (storage.type === 'memory') {
         showStatus('statusEnableLocalStorage');
@@ -631,35 +659,31 @@ function (require,   $,        object,         fn,         oauth,
     });
   };
 
-  function _fetchAndUpdateAccounts() {
-    // called after we have all the OWA services setup and the characteristics.
-    // Now ask them for the current login information.
-    for (var index = 0; index < owaservices.length; index++) {
-      // new function scope so we get a closure on index.
-      var numComplete = 0; // this seems suspect!?!?  How else to do it when all have returned?
-      var setupElement = function(i) {
-        var ch = owaservices[i].channel;
-        ch.call({
-          method: "link.send.getLogin",
-          success: function(result) {
-            owaservices[i].login = result;
-            numComplete += 1;
-            owaservicesbydomain[result.domain] = owaservices[i];
-            if (numComplete === owaservices.length) {
-              updateAccounts();
-            }
-          },
-          error: function(err, message) {
-            dump("failed to get owa login info: " + err + ": " + message + "\n");
-            numComplete += 1
-            if (numComplete === owaservices.length) {
-              updateAccounts();
-            }
+  function _fetchLoginInfo(services, callback) {
+    var numComplete = 0; // this seems suspect!?!?  How else to do it when all have returned?
+    services.forEach(function(svcRec) {
+      var ch = svcRec.channel;
+      ch.call({
+        method: "link.send.getLogin",
+        success: function(result) {
+          svcRec.login = result;
+          numComplete += 1;
+          // XXX - misplaced, but can't fix until we get rid of 'bydomain'
+          owaservicesbydomain[result.domain] = svcRec;
+          if (numComplete === services.length) {
+            callback();
           }
-        });
-      };
-      setupElement(index);
-    }
+        },
+        error: function(err, message) {
+          dump("failed to get owa login info: " + err + ": " + message + "\n");
+          svcRec.login = null;
+          numComplete += 1
+          if (numComplete === services.length) {
+            callback();
+          }
+        }
+      });
+    });
   };
 
   /* Not used, and not clear exactly when we need to do this! */
@@ -668,6 +692,9 @@ function (require,   $,        object,         fn,         oauth,
     while (owaservices.length) {
       var svcRec = owaservices.pop();
       svcRec.channel.destroy();
+      if (svcRec.subAcctsChanged) {
+        dispatch.unsub(svcRec.subAcctsChanged);
+      }
     }
     owaservicesbydomain = {};
     $("#frame-garage").empty();// this will remove iframes from DOM
@@ -675,16 +702,14 @@ function (require,   $,        object,         fn,         oauth,
 
   function _createChannels(requestMethod, requestArguments) {
     // XX we shouldn't be creating all the channels at once
-    for (var i = 0; i < owaservices.length; i++)
-    {
-      var svcRec = owaservices[i];
+    owaservices.forEach(function(svcRec, i) {
       try {
         var chan = Channel.build({
             window: svcRec.iframe.contentWindow,
             origin: svcRec.app.url,
             scope: "openwebapps_conduit"
         });
-        
+
         chan.call({
             method: requestMethod,
             params: requestArguments,
@@ -701,10 +726,19 @@ function (require,   $,        object,         fn,         oauth,
             }}())
         });
         svcRec.channel = chan;
+        // and listen for "Account changed" events coming back from it.
+        // (We do this once per app as each one may have a different origin)
+        svcRec.subAcctsChanged = dispatch.sub('accountsChanged',
+                                              function () {
+                                                location.reload();
+                                              },
+                                              window,
+                                              svcRec.app.app);
+
       } catch (e) {
         dump("Warning: unable to create channel to " + svcRec.app.url + ": " + e + "\n");
       }
-    }
+    });
   };
 
   window.addEventListener("message", function(evt) {
@@ -747,14 +781,14 @@ function (require,   $,        object,         fn,         oauth,
               numComplete += 1;
               owaservicesbydomain[result.domain] = thisSvc;
               if (numComplete === owaservices.length) {
-                _fetchAndUpdateAccounts();
+                _fetchLoginInfo(owaservices, updateAccounts);
               }
             },
             error: function(err) {
               dump("failed to get owa characteristics: " + err + "\n");
               numComplete += 1
               if (numComplete === owaservices.length) {
-                _fetchAndUpdateAccounts();
+                _fetchLoginInfo(owaservices, updateAccounts);
               }
             }
           });
