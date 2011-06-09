@@ -6,11 +6,11 @@
     },
     "description":"Connects your browser's Firefox Share to Facebook",
     "icons":{
-        "32":"/1/apps/facebook/facebook.png"
+        "32":"/1/apps/facebook.png"
     },
     "experimental": {
       "services": [
-        { 
+        {
           "link.send": "/1/apps/facebook.html"
         }
       ]
