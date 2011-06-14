@@ -66,7 +66,7 @@ function (require,   $,        object,         fn,
     options, bodyDom, sendData, tabButtonsDom,
     servicePanelsDom,
     owaservices = [], // A list of {app, iframe, channel, characteristics}
-    owaservicesbydomain = {}; // A map version of the above - XXX - should probably not be by_domain.
+    owaservicesbyid = {}; // A map version of the above
 
   //Start processing of less files right away.
   require(['text!style/' + osTheme + '.css', 'text!style.css'],
@@ -115,11 +115,10 @@ function (require,   $,        object,         fn,
     if (shouldCloseOrMessage === true) {
       setTimeout(function () {
         dispatch.pub('success', {
-          domain: sendData.domain,
           username: sendData.username,
           userid: sendData.userid,
           url: options.url,
-          service: owaservicesbydomain[sendData.domain].app.manifest.name
+          service: owaservicesbyid[sendData.appid].app.manifest.name
         });
         $('div.status').addClass('hidden');
       }, 2000);
@@ -208,14 +207,14 @@ function (require,   $,        object,         fn,
   function showStatusShared() {
     // if no sendData, we're in debug mode, default to twitter to show the
     // panel for debugging
-    var sendDomain = (sendData && sendData.domain) || 'twitter.com',
+    var svcRec = owaservicesbyid[sendData.appid],
         siteName = options.siteName,
         url = options.url || "",
         doubleSlashIndex = url.indexOf("//") + 2;
     $('#statusShared').empty().append(jig('#sharedTemplate', {
       domain: siteName || url.slice(doubleSlashIndex, url.indexOf("/", doubleSlashIndex)),
-      service: owaservicesbydomain[sendDomain].app.manifest.name,
-      href: owaservicesbydomain[sendDomain].app.url
+      service: svcRec.app.manifest.name,
+      href: svcRec.app.url
     })).find('.shareTitle').textOverflow(null, true);
     showStatus('statusShared', true);
   }
@@ -256,7 +255,8 @@ function (require,   $,        object,         fn,
     // XXX - this needs lots of work - the values we work with are specific
     // to the F1 backend implementation and not really suitable as a general
     // api.
-    var channel = owaservicesbydomain[sendData.domain].channel;
+    var svcRec = owaservicesbyid[sendData.appid];
+    var channel = svcRec.channel;
     channel.call({
       method: "confirm",
       params: sendData,
@@ -264,7 +264,7 @@ function (require,   $,        object,         fn,
         dump("send success!")
         var prop;
         // {'message': u'Status is a duplicate.', 'provider': u'twitter.com'}
-        store.set('lastSelection', owaservicesbydomain[sendData.domain].characteristics.type);
+        store.set('lastSelection', svcRec.characteristics.type);
         showStatusShared();
         //Be sure to delete sessionRestore data
         for (prop in accountPanels) {
@@ -311,10 +311,11 @@ function (require,   $,        object,         fn,
     showStatus('statusSharing');
 
     sendData = data;
+    var svcRec = owaservicesbyid[data.appid];
 
     // get any shortener prefs before trying to send.
     store.get('shortenPrefs', function (shortenPrefs) {
-          var svcConfig = owaservicesbydomain[data.domain].characteristics,
+          var svcConfig = svcRec.characteristics,
               shortenData;
 
           // hide the panel now, but only if the extension can show status
@@ -443,7 +444,6 @@ function (require,   $,        object,         fn,
           if (!thisSvc.login || !thisSvc.login.user) {
             return;
           }
-          var domain = thisSvc.login.user.domain;
           if (!thisSvc.characteristics || !thisSvc.characteristics.type) {
             // must be an old account or a removed/failing webmod.
             return;
@@ -457,11 +457,11 @@ function (require,   $,        object,         fn,
           }
 
           data = thisSvc.characteristics;
-          data.domain = domain;
+          data.appid = thisSvc.app.app;
 
-          if (accountPanels[domain]) {
+          if (accountPanels[data.appid]) {
             dump("EEEK - no concept of multiple accts per service!\n");
-            // accountPanels[domain].addService(thisSvc);
+            // accountPanels[data.appid].addService(thisSvc);
           } else {
 
             // Add a tab button for the service.
@@ -488,7 +488,7 @@ function (require,   $,        object,         fn,
             // for now, both the id and the class need to be 'type'
             accountPanel.node.setAttribute("id", type);
             $(accountPanel.node).addClass(type);
-            accountPanels[domain] = accountPanel;
+            accountPanels[data.appid] = accountPanel;
           }
 
           i++;
@@ -509,9 +509,9 @@ function (require,   $,        object,         fn,
   function updateAccounts() {
     var panelOverlays = [],
         panelOverlayMap = {},
-        //Only do one overlay request per domain. This can be removed
+        //Only do one overlay request per app/service. This can be removed
         //when requirejs is updated to 0.23.0 or later.
-        processedDomains = {};
+        processedApps = {};
 
 /***
     //Collect any UI overrides used for AccountPanel based on the services
@@ -521,14 +521,14 @@ function (require,   $,        object,         fn,
       if (!owaservice.login || !owaservice.login.user) {
         return;
       }
-      var account = owaservice.login.user;
-      var domain = account.domain,
+      var key = owaservice.app,
+          account = owaservice.login.user,
           overlays = owaservice.characteristics.overlays,
           overlay = overlays && overlays['widgets/AccountPanel'];
-      if (overlay && !processedDomains[domain]) {
+      if (overlay && !processedApps[key]) {
         panelOverlays.push(overlay);
-        panelOverlayMap[domain] = overlay;
-        processedDomains[domain] = true;
+        panelOverlayMap[key] = overlay;
+        processedApps[key] = true;
       }
     });
 ***/
@@ -551,8 +551,8 @@ function (require,   $,        object,         fn,
         sendMessage(data);
       });
 
-      dispatch.sub('logout', function (domain) {
-        var svcRec = owaservicesbydomain[domain];
+      dispatch.sub('logout', function (appid) {
+        var svcRec = owaservicesbyid[appid];
         svcRec.channel.call({
           method: "link.send.logout",
           success: function(result) {
@@ -614,7 +614,7 @@ function (require,   $,        object,         fn,
       $('#authOkButton').click(function (evt) {
         // just incase the service doesn't detect the logout automatically
         // (ie, incase it returns the stale user info), force a logout.
-        var svcRec = owaservicesbydomain[sendData.domain];
+        var svcRec = owaservicesbyid[sendData.appid];
         // apparently must create the window here, before we do the channel
         // stuff to avoid it being blocked.
         var win = window.open("",
@@ -622,7 +622,6 @@ function (require,   $,        object,         fn,
           "dialog=yes, modal=yes, width=900, height=500, scrollbars=yes");
         svcRec.channel.call({
           method: 'link.send.logout',
-          params: sendData.domain,
           success: function() {
             _fetchLoginInfo([svcRec], function() {
               if (!svcRec.login || !svcRec.login.login || !svcRec.login.login.dialog) {
@@ -671,8 +670,6 @@ function (require,   $,        object,         fn,
         success: function(result) {
           svcRec.login = result;
           numComplete += 1;
-          // XXX - misplaced, but can't fix until we get rid of 'bydomain'
-          owaservicesbydomain[result.domain] = svcRec;
           if (numComplete === services.length) {
             callback();
           }
@@ -699,7 +696,7 @@ function (require,   $,        object,         fn,
         dispatch.unsub(svcRec.subAcctsChanged);
       }
     }
-    owaservicesbydomain = {};
+    owaservicesbyid = {};
     $("#frame-garage").empty();// this will remove iframes from DOM
   };
 
@@ -764,6 +761,7 @@ function (require,   $,        object,         fn,
                         iframe: document.getElementById("svc-frame-" + index)
           }
           owaservices.push(svcRec);
+          owaservicesbyid[svc.app] = svcRec;
         });
         var requestMethod = message.method;
         var requestArgs = message.args;
@@ -782,7 +780,6 @@ function (require,   $,        object,         fn,
             success: function(result) {
               thisSvc.characteristics = result;
               numComplete += 1;
-              owaservicesbydomain[result.domain] = thisSvc;
               if (numComplete === owaservices.length) {
                 _fetchLoginInfo(owaservices, updateAccounts);
               }

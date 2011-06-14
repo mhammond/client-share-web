@@ -30,11 +30,13 @@ define([ "require", "jquery", "jschannel", "./common",
          "jquery-ui-1.8.6.custom.min"],
 
 function (require,   $,       jschannel,   common) {
+  var domain = "twitter.com"
 
   // Bind the OWA messages
   var chan = Channel.build({window: window.parent, origin: "*", scope: "openwebapps_conduit"});
   chan.bind("confirm", function(t, data) {
     dump("channel.confirm with args: " + data + "!\n");
+    data.domain = domain;
     common.send(t, data);
   });
   chan.bind("link.send", function(t, args) {
@@ -43,8 +45,7 @@ function (require,   $,       jschannel,   common) {
   chan.bind("link.send.getCharacteristics", function(t, args) {
     // some if these need re-thinking.
     return {
-      domain: 'twitter.com', // XXX - rethink - should be able to nuke this.
-      type: 'twitter', // Also not needed???
+      type: 'twitter', // XXX - should be able to nuke this.
 
       features: {
         //TODO: remove direct when old UI is no longer in use,
@@ -83,9 +84,9 @@ function (require,   $,       jschannel,   common) {
     };
   });
   chan.bind("link.send.getLogin", function(t, args) {
-    return common.getLogin(t, "twitter.com");
+    return common.getLogin(t, domain);
   });
   chan.bind("link.send.logout", function(t, args) {
-    return common.logout(t, "twitter.com");
+    return common.logout(t, domain);
   });
 });

@@ -25,7 +25,7 @@
 /*global define: false */
 "use strict";
 
-define(['blade/jig', 'services'], function (jig, services) {
+define(['blade/jig'], function (jig) {
 
   var funcs = {
     thumb: function (options) {
@@ -57,9 +57,6 @@ define(['blade/jig', 'services'], function (jig, services) {
     profilePic: function (photos) {
       //TODO: check for a thumbnail picture, hopefully one that is square.
       return photos && photos[0] && photos[0].value || 'i/face2.png';
-    },
-    serviceName: function (domain) {
-      return services.domains[domain].name;
     },
     lastToShareType: function (shareTypes) {
       var i, shareType;

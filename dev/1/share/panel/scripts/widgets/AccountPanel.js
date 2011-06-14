@@ -81,7 +81,7 @@ function (object,         Widget,         $,        template,
         //Set up the svcAccount property
         this.svcAccount = profile;
         this.svc = this.owaservice.characteristics;
-        this.storeId = 'AccountPanel-' + this.svcAccount.domain;
+        this.storeId = 'AccountPanel-' + this.owaservice.app;
 
         //Set up memory store for when user switches tabs, their messages for
         //old URLs is retained in case they are doing a composition.
@@ -471,6 +471,8 @@ function (object,         Widget,         $,        template,
         //Make sure all form elements are trimmed and username exists.
         //Then collect the form values into the data object.
         var sendData = this.getFormData();
+        // put the appid in the data so the caller can find us.
+        sendData.appid = this.owaservice.app.app;
 
         if (!this.validate(sendData)) {
           return;
@@ -492,9 +494,8 @@ function (object,         Widget,         $,        template,
       },
 
       onRemove: function (evt) {
-        //Notify the page of a send.
-        var sendData = this.getFormData();
-        dispatch.pub('logout', sendData.domain);
+        // request a logout.
+        dispatch.pub('logout', this.owaservice.app);
       }
     };
   });
