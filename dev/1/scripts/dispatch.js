@@ -51,7 +51,12 @@ define(['jquery'], function ($) {
             var message = JSON.parse(evt.data),
               pubTopic = message.topic;
             if (pubTopic && pubTopic === topic) {
-              callback(message.data);
+              try {
+                callback(message.data);
+              } catch (e) {
+                dump("Error in dispatch.sub callback for topic '" + pubTopic + "': " + e.toString() + "\n");
+                dump(e.stack);
+              }
             }
           } catch (e) {
             //Just ignore messages that are not JSON. There are some, like
