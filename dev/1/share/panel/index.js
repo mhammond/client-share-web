@@ -37,13 +37,13 @@
 
 define([ "require", "jquery", "blade/object", "blade/fn",
         "blade/jig", "blade/url", "dispatch",
-         "storage",  "widgets/AccountPanel", "widgets/TabButton",
+         "storage",  "widgets/ServicePanel", "widgets/TabButton",
          "widgets/AddAccount", "less", "osTheme", "jquery-ui-1.8.7.min",
          "jquery.textOverflow", "jschannel",
          ],
 function (require,   $,        object,         fn,
           jig,         url,        dispatch,
-          storage,   AccountPanel,           TabButton,
+          storage,   ServicePanel,           TabButton,
           AddAccount,           less,   osTheme) {
 
   var onFirstShareState = null,
@@ -472,8 +472,7 @@ function (require,   $,        object,         fn,
             }, tabFragment));
 
             // Get the contructor function for the panel.
-            PanelCtor = require(panelOverlayMap[domain] || 'widgets/AccountPanel');
-
+            PanelCtor = require('widgets/ServicePanel');
             accountPanel = new PanelCtor({
               options: options,
               owaservice: thisSvc
@@ -486,6 +485,9 @@ function (require,   $,        object,         fn,
               accountPanel.asyncCreate.then(finishCreate);
             }
 
+            // for now, both the id and the class need to be 'type'
+            accountPanel.node.setAttribute("id", type);
+            $(accountPanel.node).addClass(type);
             accountPanels[domain] = accountPanel;
           }
 
@@ -511,6 +513,7 @@ function (require,   $,        object,         fn,
         //when requirejs is updated to 0.23.0 or later.
         processedDomains = {};
 
+/***
     //Collect any UI overrides used for AccountPanel based on the services
     //the user has configured.
     owaservices.forEach(function (owaservice) {
@@ -528,7 +531,7 @@ function (require,   $,        object,         fn,
         processedDomains[domain] = true;
       }
     });
-
+***/
     if (panelOverlays.length) {
       require(panelOverlays, function () {
         displayAccounts(panelOverlayMap);
