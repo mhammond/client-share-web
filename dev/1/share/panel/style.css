@@ -136,6 +136,16 @@
   top: 4px;
 }
 
+.AccountLoadingSpinner {
+  position: absolute;
+  top: 4px;
+  right: 3px;
+  width: 16px;
+  height: 16px;
+  background-image: url('i/loader.gif');
+  z-index: 200;
+}
+
 * {
   padding: 0;
   margin: 0;
@@ -269,7 +279,18 @@ h3 {
 }
 
 
-/* Service panel widgets */
+/* Service panel widgets (all but the 'account' panels) */
+
+.ServiceAccountPanel {
+  width: 360px;
+  height: 56px;
+  box-sizing: border-box;
+  margin: 14px;
+  text-align: center;
+}
+
+/* Account panel widgets */
+
 
 .widgets-AddAccount {
   width: 360px;
