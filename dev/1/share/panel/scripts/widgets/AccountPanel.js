@@ -495,7 +495,7 @@ function (object,         Widget,         $,        template,
 
       onRemove: function (evt) {
         // request a logout.
-        dispatch.pub('logout', this.owaservice.app);
+        dispatch.pub('logout', this.owaservice.app.app);
       }
     };
   });
