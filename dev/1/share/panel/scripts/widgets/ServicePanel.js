@@ -40,6 +40,9 @@ function (object,         Widget,         $,        template,
     $('body')
       .delegate('.remove', 'click', function (evt) {
         Widget.closest(module.id, evt, 'onRemove');
+      })
+      .delegate('.login', 'click', function (evt) {
+        Widget.closest(module.id, evt, 'onLogin');
       });
   });
 
@@ -121,6 +124,15 @@ function (object,         Widget,         $,        template,
 
       onRemove: function (evt) {
         dump("TODO: This needs to remove the entire account, not just logout");
+      },
+      onLogin: function (evt) {
+        // hrmph - tried to dispatch.pub back to the main panel but then
+        // the popup was blocked.
+        var url = this.owaservice.app.app + this.owaservice.login.login.dialog,
+            win = window.open(url,
+                  "ffshareOAuth",
+                  "dialog=yes, modal=yes, width=900, height=500, scrollbars=yes");
+        win.focus();
       }
     };
   });

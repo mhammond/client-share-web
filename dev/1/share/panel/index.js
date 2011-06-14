@@ -264,7 +264,7 @@ function (require,   $,        object,         fn,
         dump("send success!")
         var prop;
         // {'message': u'Status is a duplicate.', 'provider': u'twitter.com'}
-        store.set('lastSelection', svcRec.characteristics.type);
+        store.set('lastSelection', sendData.appid);
         showStatusShared();
         //Be sure to delete sessionRestore data
         for (prop in accountPanels) {
@@ -439,36 +439,32 @@ function (require,   $,        object,         fn,
         }
 
         //Figure out what accounts we do have
-        owaservices.forEach(function (thisSvc) {
-          // may have failed to offer login info, or may be logged out - skip them
-          if (!thisSvc.login || !thisSvc.login.user) {
-            return;
-          }
-          if (!thisSvc.characteristics || !thisSvc.characteristics.type) {
-            // must be an old account or a removed/failing webmod.
-            return;
-          }
-          var type = thisSvc.characteristics.type,
-              data, PanelCtor;
+        owaservices.forEach(function (thisSvc, index) {
+          var appid = thisSvc.app.app,
+              tabId = "ServicePanel" + index,
+              PanelCtor;
 
           //Make sure to see if there is a match for last selection
-          if (type === lastSelection) {
+          if (appid === lastSelection) {
             lastSelectionMatch = i;
           }
 
-          data = thisSvc.characteristics;
-          data.appid = thisSvc.app.app;
-
-          if (accountPanels[data.appid]) {
+          if (accountPanels[appid]) {
             dump("EEEK - no concept of multiple accts per service!\n");
-            // accountPanels[data.appid].addService(thisSvc);
+            // accountPanels[appid].addService(thisSvc);
           } else {
-
+            /// XXX - need the OWA icon helper!!
+            var icon;
+            for (var z in thisSvc.app.manifest.icons) {
+              icon = thisSvc.app.app + thisSvc.app.manifest.icons[z];
+              break;
+            }
             // Add a tab button for the service.
             tabsDom.append(new TabButton({
-              target: type,
-              type: type,
-              title: thisSvc.app.manifest.name
+              target: tabId,
+              type: appid,
+              title: thisSvc.app.manifest.name,
+              serviceIcon: icon
             }, tabFragment));
 
             // Get the contructor function for the panel.
@@ -485,10 +481,8 @@ function (require,   $,        object,         fn,
               accountPanel.asyncCreate.then(finishCreate);
             }
 
-            // for now, both the id and the class need to be 'type'
-            accountPanel.node.setAttribute("id", type);
-            $(accountPanel.node).addClass(type);
-            accountPanels[data.appid] = accountPanel;
+            accountPanel.node.setAttribute("id", tabId);
+            accountPanels[appid] = accountPanel;
           }
 
           i++;
@@ -534,10 +528,10 @@ function (require,   $,        object,         fn,
 ***/
     if (panelOverlays.length) {
       require(panelOverlays, function () {
-        displayAccounts(panelOverlayMap);
+        dispatch.pub('optionsChanged', options);
       });
     } else {
-      displayAccounts(panelOverlayMap);
+      dispatch.pub('optionsChanged', options);
     }
   }
 
@@ -580,7 +574,8 @@ function (require,   $,        object,         fn,
           evt.preventDefault();
 
           //Switch Tabs
-          var node = evt.target,
+          // Ack - the click event seems to come from the img rather than the anchor?
+          var node = evt.target.nodeName==='A' ? evt.target : evt.target.parentNode,
               target = node.href.split('#')[1];
 
           tabButtonsDom.removeClass('selected');
@@ -623,7 +618,7 @@ function (require,   $,        object,         fn,
         svcRec.channel.call({
           method: 'link.send.logout',
           success: function() {
-            _fetchLoginInfo([svcRec], function() {
+            _fetchLoginInfo(svcRec, function() {
               if (!svcRec.login || !svcRec.login.login || !svcRec.login.login.dialog) {
                 dump("Eeek - didn't get a login URL back from the service\n");
                 showStatus('statusOAuthFailed');
@@ -661,28 +656,19 @@ function (require,   $,        object,         fn,
     });
   };
 
-  function _fetchLoginInfo(services, callback) {
-    var numComplete = 0; // this seems suspect!?!?  How else to do it when all have returned?
-    services.forEach(function(svcRec) {
-      var ch = svcRec.channel;
-      ch.call({
-        method: "link.send.getLogin",
-        success: function(result) {
-          svcRec.login = result;
-          numComplete += 1;
-          if (numComplete === services.length) {
-            callback();
-          }
-        },
-        error: function(err, message) {
-          dump("failed to get owa login info: " + err + ": " + message + "\n");
-          svcRec.login = null;
-          numComplete += 1
-          if (numComplete === services.length) {
-            callback();
-          }
-        }
-      });
+  function _fetchLoginInfo(svcRec, callback) {
+    var ch = svcRec.channel;
+    ch.call({
+      method: "link.send.getLogin",
+      success: function(result) {
+        svcRec.login = result;
+        callback();
+      },
+      error: function(err, message) {
+        dump("failed to get owa login info: " + err + ": " + message + "\n");
+        svcRec.login = null;
+        callback();
+      }
     });
   };
 
@@ -763,6 +749,7 @@ function (require,   $,        object,         fn,
           owaservices.push(svcRec);
           owaservicesbyid[svc.app] = svcRec;
         });
+        displayAccounts();
         var requestMethod = message.method;
         var requestArgs = message.args;
       /* XXX - strange - don't get the start_channels even though OWA's
@@ -772,24 +759,21 @@ function (require,   $,        object,         fn,
         _createChannels(requestMethod, requestArgs);
         // use the newly created channels to get the characteristics for
         // each owa service.
-        var numComplete = 0; // this seems suspect!?!?  How else to do it when all have returned?
         owaservices.forEach(function(thisSvc) {
           var ch = thisSvc.channel;
           ch.call({
             method: "link.send.getCharacteristics",
             success: function(result) {
               thisSvc.characteristics = result;
-              numComplete += 1;
-              if (numComplete === owaservices.length) {
-                _fetchLoginInfo(owaservices, updateAccounts);
-              }
+              _fetchLoginInfo(thisSvc, function() {
+                dispatch.pub('optionsChanged', options);
+              });
             },
             error: function(err) {
               dump("failed to get owa characteristics: " + err + "\n");
-              numComplete += 1
-              if (numComplete === owaservices.length) {
-                _fetchLoginInfo(owaservices, updateAccounts);
-              }
+              _fetchLoginInfo(thisSvc, function() {
+                dispatch.pub('optionsChanged', options);
+              });
             }
           });
         });
