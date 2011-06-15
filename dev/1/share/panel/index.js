@@ -432,7 +432,7 @@ function (require,   $,        object,         fn,
           // which domain was last active?
           // TODO in new tabs world.
           //$("#accounts").accordion({ active: lastSelectionMatch });
-          tabButtonsDom.eq(0).click();
+          tabButtonsDom.eq(lastSelectionMatch).click();
 
           //Reset the just added state now that accounts have been configured one time.
           if (accountAdded) {

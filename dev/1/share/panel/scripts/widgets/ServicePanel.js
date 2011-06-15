@@ -26,10 +26,10 @@
 "use strict";
 
 define([ 'blade/object', 'blade/Widget', 'jquery', 'text!./ServicePanel.html',
-         'module', 'dispatch', 'widgets/AccountPanel',
+         'storage', 'module', 'dispatch', 'widgets/AccountPanel',
          'require', 'blade/fn', './jigFuncs'],
 function (object,         Widget,         $,        template,
-          module,   dispatch, AccountPanel,
+          storage, module,   dispatch, AccountPanel,
           require,   fn,         jigFuncs) {
 
   var className = module.id.replace(/\//g, '-');
@@ -128,10 +128,12 @@ function (object,         Widget,         $,        template,
       onLogin: function (evt) {
         // hrmph - tried to dispatch.pub back to the main panel but then
         // the popup was blocked.
-        var url = this.owaservice.app.app + this.owaservice.login.login.dialog,
+        var store = storage(),
+            url = this.owaservice.app.app + this.owaservice.login.login.dialog,
             win = window.open(url,
                   "ffshareOAuth",
                   "dialog=yes, modal=yes, width=900, height=500, scrollbars=yes");
+        store.set('lastSelection', this.owaservice.app.app);
         win.focus();
       }
     };
