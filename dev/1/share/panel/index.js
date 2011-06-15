@@ -130,6 +130,14 @@ function (require,   $,        object,         fn,
     dispatch.pub('sizeToContent');
   }
 
+  dispatch.sub('openwebapp-installed', function(data) {
+    location.reload();
+  });
+
+  dispatch.sub('openwebapp-uninstalled', function(data) {
+    location.reload();
+  });
+
   function showStatus(statusId, shouldCloseOrMessage) {
     $('div.status').addClass('hidden');
     $('#clickBlock').removeClass('hidden');

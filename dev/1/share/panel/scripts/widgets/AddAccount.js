@@ -45,10 +45,21 @@ function (object,         fn,         Widget,         $,
         //Use a Select widget because web content in a panel on Linux
         //has a problem with native selects.
 
+        // This needs to come from the F1 server.  Further, we eventually need
+        // integration with OWA service discovery so the user can find additional
+        // apps to install for this service.  When that happens:
+        // * We probably want to magically exclude our (eg) "Facebook" app if
+        //   we discover one hosted by facebook (ditto twitter etc)
+        // * Need to rethink the UI in the face of this discovery being async
+        //   and possibly slow to respond.  Ideally we could leverage the UI
+        //   from OWA itself (once that is built ;)
+        var apps = [{name: "Facebook", url: "http://linkdrop.caraveo.com:5000/1/apps/facebook.webapp"},
+                    {name: "Twitter", url: "http://localhost:5000/1/apps/twitter.webapp"}];
+
         var options = [{name: 'Select type', value: ''}];
-        this.owaservices.forEach(function(owasvc, i) {
+        apps.forEach(function(apprec, i) {
           options.push({
-            name: owasvc.app.manifest.name,
+            name: apprec.name,
             value: i.toString()
           });
         });
@@ -60,15 +71,12 @@ function (object,         fn,         Widget,         $,
 
         //Listen for changes
         this.select.dom.bind('change', fn.bind(this, function (evt) {
-
           var index = this.select.val();
-          if (typeof(index) !== 'undefined') {
-            var thisService = this.owaservices[index],
-                url = thisService.app.app + thisService.login.login.dialog,
-                win = window.open(url,
-                  "ffshareOAuth",
-                  "dialog=yes, modal=yes, width=900, height=500, scrollbars=yes");
-            win.focus();
+          if (typeof(index) !== 'undefined' && index !== '') {
+            var apprec = apps[index];
+            // we ask the chrome to perform the installation as we don't
+            // have permission.
+            dispatch.pub("installApp", apprec.url);
           }
         }));
       }
