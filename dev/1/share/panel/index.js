@@ -107,9 +107,17 @@ function (require,   $,        object,         fn,
   window.closeShare = close;
 
   function updateChromeStatus(status, statusId, message) {
-    dispatch.pub('updateStatus', [status, statusId, message, options.url]);
+    var app = sendData.appid;
+    var result = {status:status, statusId:statusId, message:message, url:options.url};
+    var messageData = {app:app, cmd:"updateStatus", result:result};
+    sendOWAMessage(messageData);
   }
   window.updateChromeStatus = updateChromeStatus;
+
+  function sizePanelToContent() {
+    sendOWAMessage({cmd: 'sizeToContent'});
+  }
+  window.sizePanelToContent = sizePanelToContent;
 
   function _showStatus(statusId, shouldCloseOrMessage) {
     if (shouldCloseOrMessage === true) {
@@ -127,7 +135,7 @@ function (require,   $,        object,         fn,
     }
 
     //Tell the extension that the size of the content may have changed.
-    dispatch.pub('sizeToContent');
+    sizePanelToContent();
   }
 
   dispatch.sub('openwebapp-installed', function(data) {
@@ -206,7 +214,7 @@ function (require,   $,        object,         fn,
         }
 
         //Tell the extension that the size of the content may have changed.
-        dispatch.pub('sizeToContent');
+        sizePanelToContent();
       }
     }
   }
@@ -269,7 +277,6 @@ function (require,   $,        object,         fn,
       method: "confirm",
       params: sendData,
       success: function() {
-        dump("send success!")
         var prop;
         // {'message': u'Status is a duplicate.', 'provider': u'twitter.com'}
         store.set('lastSelection', sendData.appid);
@@ -283,6 +290,10 @@ function (require,   $,        object,         fn,
         // notify on successful send for components that want to do
         // work, like save any new contacts.
         dispatch.pub('sendComplete', sendData);
+        // Let the 'shared' status stay up for a second.
+        setTimeout(function() {
+            sendOWAMessage({cmd: 'result', app: sendData.appid, data: sendData});
+          }, 1000);
       },
       error: function(error, message) {
         dump("SEND FAILURE: " + error + "/" + message + "\n");
@@ -442,7 +453,7 @@ function (require,   $,        object,         fn,
           //Inform extension the content size has changed, but use a delay,
           //to allow any reflow/adjustments.
           setTimeout(function () {
-            dispatch.pub('sizeToContent');
+            sizePanelToContent();
           }, 100);
         }
 
@@ -593,7 +604,7 @@ function (require,   $,        object,         fn,
           $('#' + target).removeClass('hidden');
 
           setTimeout(function () {
-            dispatch.pub('sizeToContent');
+            sizePanelToContent();
           }, 15);
         })
         .delegate('#statusAuthButton, .statusErrorButton', 'click', function (evt) {
@@ -696,6 +707,9 @@ function (require,   $,        object,         fn,
 
   function _createChannels(requestMethod, requestArguments) {
     // XX we shouldn't be creating all the channels at once
+    options = requestArguments;
+    onFirstShareState();
+
     owaservices.forEach(function(svcRec, i) {
       try {
         var chan = Channel.build({
@@ -734,6 +748,17 @@ function (require,   $,        object,         fn,
       }
     });
   };
+
+  function sendOWAMessage(messageData) {
+    var msg = document.createEvent("MessageEvent");
+    msg.initMessageEvent("message", // type
+                         true, true, // bubble, cancelable
+                         JSON.stringify(messageData),  // data
+                         "resource://openwebapps/service", "", window); // origin, source
+    document.dispatchEvent(msg);
+  }
+  window.sendOWAMessage = sendOWAMessage;
+
 
   function handleOWAMessage(message) {
     var topic, data;

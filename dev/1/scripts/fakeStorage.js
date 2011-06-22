@@ -51,7 +51,7 @@ define(['dispatch'], function (dispatch) {
   }
 
   subs = {
-    panelReady: function () {
+    XXX_NOT_panelReady: function () {
       targetPub('shareState', {
         status: 0,
         open: true,

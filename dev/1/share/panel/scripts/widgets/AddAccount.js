@@ -76,7 +76,8 @@ function (object,         fn,         Widget,         $,
             var apprec = apps[index];
             // we ask the chrome to perform the installation as we don't
             // have permission.
-            dispatch.pub("installApp", apprec.url);
+            var messageData = {cmd:"installApp", app: apprec.url};
+            sendOWAMessage(messageData);
           }
         }));
       }

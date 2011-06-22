@@ -461,7 +461,7 @@ function (object,         Widget,         $,        template,
         //is enabled.
         this.resetError();
 
-        dispatch.pub('sizeToContent');
+        sizePanelToContent();
       },
 
       onSubmit: function (evt) {
