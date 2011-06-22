@@ -135,6 +135,18 @@ function (object,         Widget,         $,        template,
                   "dialog=yes, modal=yes, width=900, height=500, scrollbars=yes");
         store.set('lastSelection', this.owaservice.app.app);
         win.focus();
+      },
+
+      saveData: function() {
+        if (this.accountPanel) {
+          this.accountPanel.saveData();
+        }
+      },
+
+      clearSavedData: function() {
+        if (this.accountPanel) {
+          this.accountPanel.clearSavedData();
+        }
       }
     };
   });
