@@ -735,57 +735,63 @@ function (require,   $,        object,         fn,
     });
   };
 
+  function handleOWAMessage(message) {
+    var topic, data;
+    try {
+      // Only some messages are valid JSON, only care about the ones
+      // that are.
+      message = JSON.parse(message);
+    } catch (e) {
+      dump("share panel ignoring non-json message\n");
+      return;
+    }
+    if (message.cmd === "setup") {
+      // Sent by OWA after it has created the iframes.
+      message.serviceList.forEach(function(svc, index) {
+        var svcRec = {app: svc,
+                      iframe: document.getElementById("svc-frame-" + index)
+        }
+        owaservices.push(svcRec);
+        owaservicesbyid[svc.app] = svcRec;
+      });
+      displayAccounts();
+      var requestMethod = message.method;
+      var requestArgs = message.args;
+    /* XXX - strange - don't get the start_channels even though OWA's
+      services.js sends this immediately after 'setup'!!!
+    } else if (message.cmd === "start_channels") {
+    *****/
+      _createChannels(requestMethod, requestArgs);
+      // use the newly created channels to get the characteristics for
+      // each owa service.
+      owaservices.forEach(function(thisSvc) {
+        var ch = thisSvc.channel;
+        ch.call({
+          method: "link.send.getCharacteristics",
+          success: function(result) {
+            thisSvc.characteristics = result;
+            _fetchLoginInfo(thisSvc, function() {
+              dispatch.pub('optionsChanged', options);
+            });
+          },
+          error: function(err) {
+            dump("failed to get owa characteristics: " + err + "\n");
+            _fetchLoginInfo(thisSvc, function() {
+              dispatch.pub('optionsChanged', options);
+            });
+          }
+        });
+      });
+    }
+  };
+  // currently hacks in the OWA code mean we must expose this function
+  window.handleAdminPostMessage = handleOWAMessage;
+
   window.addEventListener("message", function(evt) {
     // Make sure we only act on messages from "ourself" (actually, they come
     // from OWA, but it sets the origin to our window...)
     if (window.location.href.indexOf(evt.origin) === 0) {
-      var message = evt.data, topic, data;
-      try {
-        // Only some messages are valid JSON, only care about the ones
-        // that are.
-        message = JSON.parse(message);
-      } catch (e) {
-        dump("share panel ignoring non-json message");
-        return;
-      }
-      if (message.cmd === "setup") {
-        // Sent by OWA after it has created the iframes.
-        message.serviceList.forEach(function(svc, index) {
-          var svcRec = {app: svc,
-                        iframe: document.getElementById("svc-frame-" + index)
-          }
-          owaservices.push(svcRec);
-          owaservicesbyid[svc.app] = svcRec;
-        });
-        displayAccounts();
-        var requestMethod = message.method;
-        var requestArgs = message.args;
-      /* XXX - strange - don't get the start_channels even though OWA's
-        services.js sends this immediately after 'setup'!!!
-      } else if (message.cmd === "start_channels") {
-      *****/
-        _createChannels(requestMethod, requestArgs);
-        // use the newly created channels to get the characteristics for
-        // each owa service.
-        owaservices.forEach(function(thisSvc) {
-          var ch = thisSvc.channel;
-          ch.call({
-            method: "link.send.getCharacteristics",
-            success: function(result) {
-              thisSvc.characteristics = result;
-              _fetchLoginInfo(thisSvc, function() {
-                dispatch.pub('optionsChanged', options);
-              });
-            },
-            error: function(err) {
-              dump("failed to get owa characteristics: " + err + "\n");
-              _fetchLoginInfo(thisSvc, function() {
-                dispatch.pub('optionsChanged', options);
-              });
-            }
-          });
-        });
-      }
+      handleOWAMessage(evt.data);
     }
   }, false);
 
