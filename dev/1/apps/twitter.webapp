@@ -9,10 +9,10 @@
         "32":"/1/apps/twitter_newbird_blue.png"
     },
     "experimental": {
-      "services": [
-        {
-          "link.send": "/1/apps/twitter.html"
+      "services": {
+        "link.send": {
+          "endpoint": "/1/apps/twitter.html"
         }
-      ]
+      }
     }
 }
