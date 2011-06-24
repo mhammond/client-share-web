@@ -228,7 +228,6 @@ function (object,         Widget,         $,        template,
         //string equality operators to stay for linting.
         return data.link !== jigFuncs.link(this.options) ||
               data.userid !== String(this.svcAccount.userid) ||
-              data.domain !== String(this.svcAccount.domain) ||
               data.username !== String(this.svcAccount.username);
       },
 
@@ -236,9 +235,12 @@ function (object,         Widget,         $,        template,
         this.memStore = {};
         store.remove(this.storeId);
 
-        //Also clear up the form data.
+        //Also clear up the form data (but note this may be called before
+        // we have been rendered, so some nodes may not yet exist)
         var root = $(this.node);
-        this.toDom.val('');
+        if (this.toDom) {
+          this.toDom.val('');
+        }
         root.find('[name="subject"]').val('');
         root.find('[name="message"]').val('');
         if (this.svc.textLimit) {
