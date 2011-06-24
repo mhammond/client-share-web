@@ -703,6 +703,12 @@ function (require,   $,        object,         fn,
     }
     owaservicesbyid = {};
     $("#frame-garage").empty();// this will remove iframes from DOM
+    $("#tabs").empty();
+    $("#tabContent").empty();
+    for (var appid in accountPanels) {
+      accountPanels[appid].saveData();
+    }
+    accountPanels = {};
   };
 
   function _createChannels(requestMethod, requestArguments) {
@@ -770,7 +776,10 @@ function (require,   $,        object,         fn,
       dump("share panel ignoring non-json message\n");
       return;
     }
-    if (message.cmd === "setup") {
+    if (message.cmd === "init") {
+      // Sent by OWA before it creates the iframes etc.
+      _deleteOldServices();
+    } else if (message.cmd === "setup") {
       // Sent by OWA after it has created the iframes.
       message.serviceList.forEach(function(svc, index) {
         var svcRec = {app: svc,
