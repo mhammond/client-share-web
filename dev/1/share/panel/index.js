@@ -138,14 +138,6 @@ function (require,   $,        object,         fn,
     sizePanelToContent();
   }
 
-  dispatch.sub('openwebapp-installed', function(data) {
-    location.reload();
-  });
-
-  dispatch.sub('openwebapp-uninstalled', function(data) {
-    location.reload();
-  });
-
   function showStatus(statusId, shouldCloseOrMessage) {
     $('div.status').addClass('hidden');
     $('#clickBlock').removeClass('hidden');
@@ -173,9 +165,13 @@ function (require,   $,        object,         fn,
   function shareStateUpdate(shareState) {
     var now = (new Date()).getTime(),
         status;
+/* XXX - this will not work as just doing a reload will not trigger
+   the OWA code from kicking in.
     if (now - refreshStamp > refreshInterval) {
       //Force contact with the server via the true argument.
       location.reload(true);
+***/
+    if (false) {
     } else {
 
       options = shareState.options;
@@ -386,8 +382,7 @@ function (require,   $,        object,         fn,
         tabsDom = $('#tabs'),
         tabContentDom = $('#tabContent'),
         tabFragment = document.createDocumentFragment(),
-        fragment = document.createDocumentFragment(),
-        i = 0;
+        fragment = document.createDocumentFragment();
 
     $('#shareui').removeClass('hidden');
 
@@ -399,16 +394,8 @@ function (require,   $,        object,         fn,
             accountPanel;
 
         // Finishes account creation. Actually runs *after* the work done
-        // below this function. Need a function callback since AccountPanel
-        // construction is async.
+        // below this function.
         function finishCreate() {
-          asyncCount -= 1;
-
-          // Could still be waiting for other async creations. If so, wait.
-          if (asyncCount > 0 || !asyncConstructionDone) {
-            return;
-          }
-
           var addButton, addAccountWidget;
 
           // Add tab button for add account
@@ -426,7 +413,6 @@ function (require,   $,        object,         fn,
           // add the tabs and tab contents now
           tabsDom.append(tabFragment);
           tabContentDom.append(fragment);
-
 
           // Get a handle on the DOM elements used for tab selection.
           tabButtonsDom = $('.widgets-TabButton');
@@ -465,7 +451,7 @@ function (require,   $,        object,         fn,
 
           //Make sure to see if there is a match for last selection
           if (appid === lastSelection) {
-            lastSelectionMatch = i;
+            lastSelectionMatch = index;
           }
 
           if (accountPanels[appid]) {
@@ -493,65 +479,17 @@ function (require,   $,        object,         fn,
               owaservice: thisSvc
             }, fragment);
 
-            // if an async creation, then wait until all are created before
-            // proceeding with UI construction.
-            if (accountPanel.asyncCreate) {
-              asyncCount += 1;
-              accountPanel.asyncCreate.then(finishCreate);
-            }
-
             accountPanel.node.setAttribute("id", tabId);
             accountPanels[appid] = accountPanel;
           }
-
-          i++;
         });
-
-        asyncConstructionDone = true;
-
-        // The async creation could have finished if all the data values
-        // for the account panels were already cached. If so, then finish
-        // out the UI construction.
-        if (!asyncCount) {
-          finishCreate();
-        }
+        finishCreate();
       });
     });
   }
 
   function updateAccounts() {
-    var panelOverlays = [],
-        panelOverlayMap = {},
-        //Only do one overlay request per app/service. This can be removed
-        //when requirejs is updated to 0.23.0 or later.
-        processedApps = {};
-
-/***
-    //Collect any UI overrides used for AccountPanel based on the services
-    //the user has configured.
-    owaservices.forEach(function (owaservice) {
-      // may have failed to offer login info, or may be logged out - skip them
-      if (!owaservice.login || !owaservice.login.user) {
-        return;
-      }
-      var key = owaservice.app,
-          account = owaservice.login.user,
-          overlays = owaservice.characteristics.overlays,
-          overlay = overlays && overlays['widgets/AccountPanel'];
-      if (overlay && !processedApps[key]) {
-        panelOverlays.push(overlay);
-        panelOverlayMap[key] = overlay;
-        processedApps[key] = true;
-      }
-    });
-***/
-    if (panelOverlays.length) {
-      require(panelOverlays, function () {
-        dispatch.pub('optionsChanged', options);
-      });
-    } else {
-      dispatch.pub('optionsChanged', options);
-    }
+    dispatch.pub('optionsChanged', options);
   }
 
   // Set up initialization work for the first share state passing.
@@ -570,12 +508,12 @@ function (require,   $,        object,         fn,
           method: "link.send.logout",
           success: function(result) {
             dump("logout worked\n");
-            location.reload();
+            sendOWAMessage({cmd: "reconfigure"});
           },
           error: function(err, message) {
             dump("failed to logout: " + err + ": " + message + "\n");
             // may as well update the accounts anyway incase it really did work!
-            location.reload();
+            sendOWAMessage({cmd: "reconfigure"});
           }
         });
       });
@@ -691,7 +629,6 @@ function (require,   $,        object,         fn,
     });
   };
 
-  /* Not used, and not clear exactly when we need to do this! */
   function _deleteOldServices() {
     // first the channels
     while (owaservices.length) {
@@ -712,7 +649,6 @@ function (require,   $,        object,         fn,
   };
 
   function _createChannels(requestMethod, requestArguments) {
-    // XX we shouldn't be creating all the channels at once
     options = requestArguments;
     onFirstShareState();
 
@@ -744,7 +680,7 @@ function (require,   $,        object,         fn,
         // (We do this once per app as each one may have a different origin)
         svcRec.subAcctsChanged = dispatch.sub('accountsChanged',
                                               function () {
-                                                location.reload();
+                                                sendOWAMessage({cmd: "reconfigure"});
                                               },
                                               window,
                                               svcRec.app.app);
@@ -821,6 +757,7 @@ function (require,   $,        object,         fn,
   // currently hacks in the OWA code mean we must expose this function
   window.handleAdminPostMessage = handleOWAMessage;
 
+/** Currently not used as OWA doesn't postMessage at the moment
   window.addEventListener("message", function(evt) {
     // Make sure we only act on messages from "ourself" (actually, they come
     // from OWA, but it sets the origin to our window...)
@@ -828,6 +765,8 @@ function (require,   $,        object,         fn,
       handleOWAMessage(evt.data);
     }
   }, false);
+
+***/
 
   // Trigger a call for the first share state.
   dispatch.pub('panelReady', null);
