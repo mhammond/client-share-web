@@ -217,8 +217,6 @@ function (require,   $,        object,         fn,
   dispatch.sub('shareState', shareStateUpdate);
 
   function showStatusShared() {
-    // if no sendData, we're in debug mode, default to twitter to show the
-    // panel for debugging
     var svcRec = owaservicesbyid[sendData.appid],
         siteName = options.siteName,
         url = options.url || "",
@@ -258,6 +256,7 @@ function (require,   $,        object,         fn,
   // You probably want sendMessage, not this call.
   function callSendApi() {
     var data = object.create(sendData);
+    updateChromeStatus(SHARE_START);
     //For now strip out the bitly placeholder since the backend does
     //not support it. This is being tracked in:
     //https://bugzilla.mozilla.org/show_bug.cgi?id=653277
@@ -285,18 +284,24 @@ function (require,   $,        object,         fn,
         }
         // notify on successful send for components that want to do
         // work, like save any new contacts.
+        updateChromeStatus(SHARE_DONE);
         dispatch.pub('sendComplete', sendData);
         // Let the 'shared' status stay up for a second.
         setTimeout(function() {
-            sendOWAMessage({cmd: 'result', app: sendData.appid, data: sendData});
+            // do *not* send the sendData in the result as that might leak
+            // private information to content.
+            sendOWAMessage({cmd: 'result', app: sendData.appid, data: "ok"});
           }, 1000);
       },
       error: function(error, message) {
+        var fatal = true; // false if we can automatically take corrective action.
         dump("SEND FAILURE: " + error + "/" + message + "\n");
         if (error === 'authentication') {
           reAuth();
+          fatal = false;
         } else if (error === 'captcha') {
           handleCaptcha(message[0], message[1]);
+          fatal = false;
         } else if (error === 'http_error') {
           var status = message;
           if (status === 403) {
@@ -317,6 +322,14 @@ function (require,   $,        object,         fn,
           }
         } else {
           showStatus('statusError', message);
+        }
+        updateChromeStatus(SHARE_ERROR);
+        if (fatal) {
+          // Let the 'error' status stay up for a second then notify OWA of
+          // the error.
+          setTimeout(function() {
+              sendOWAMessage({cmd: 'error', app: sendData.appid, data: "error"});
+            }, 1000);
         }
       }
     });
