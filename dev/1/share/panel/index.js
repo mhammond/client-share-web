@@ -46,8 +46,8 @@ function (require,   $,        object,         fn,
           storage,   ServicePanel,           TabButton,
           AddAccount,           less,   osTheme) {
 
-  var onFirstShareState = null,
-    accountPanels = {},
+  var accountPanels = {},
+    accountPanelsRestoreState = {},
     store = storage(),
     SHARE_DONE = 0,
     SHARE_START = 1,
@@ -162,60 +162,6 @@ function (require,   $,        object,         fn,
     resetStatusDisplay();
   }
 
-  function shareStateUpdate(shareState) {
-    var now = (new Date()).getTime(),
-        status;
-/* XXX - this will not work as just doing a reload will not trigger
-   the OWA code from kicking in.
-    if (now - refreshStamp > refreshInterval) {
-      //Force contact with the server via the true argument.
-      location.reload(true);
-***/
-    if (false) {
-    } else {
-
-      options = shareState.options;
-      // TODO: figure out if we can avoid this call if this is just
-      // an error update.
-      checkBase64Preview();
-
-      if (onFirstShareState) {
-        onFirstShareState();
-        onFirstShareState = null;
-      } else {
-        dispatch.pub('optionsChanged', options);
-
-        // just a status update.
-        status = null;
-        if (shareState && shareState.status) {
-          // remove the status number
-          status = shareState.status.slice(1);
-        }
-        if (status && status[0]) {
-          _showStatus.apply(null, status);
-        } else {
-          //clear all status, but if settings config needs to be shown, show it.
-          cancelStatus();
-/* XXX - what is this doing??
-          accounts(
-            function (accts) {
-              if (!accts || !accts.length) {
-                tabButtonsDom.eq(0).click();
-              }
-            }, function (err) {
-              tabButtonsDom.eq(0).click();
-            }
-          );
-***/
-        }
-
-        //Tell the extension that the size of the content may have changed.
-        sizePanelToContent();
-      }
-    }
-  }
-  dispatch.sub('shareState', shareStateUpdate);
-
   function showStatusShared() {
     var svcRec = owaservicesbyid[sendData.appid],
         siteName = options.siteName,
@@ -242,13 +188,6 @@ function (require,   $,        object,         fn,
   window.handleCaptcha = handleCaptcha;
 
   function reAuth() {
-    //Save form state so their message can be recovered after
-    //binding accounts.
-    for (var prop in accountPanels) {
-      if (accountPanels.hasOwnProperty(prop)) {
-        accountPanels[prop].saveData();
-      }
-    }
     showStatus('statusAuth');
   }
 
@@ -276,12 +215,6 @@ function (require,   $,        object,         fn,
         // {'message': u'Status is a duplicate.', 'provider': u'twitter.com'}
         store.set('lastSelection', sendData.appid);
         showStatusShared();
-        //Be sure to delete sessionRestore data
-        for (prop in accountPanels) {
-          if (accountPanels.hasOwnProperty(prop)) {
-            accountPanels[prop].clearSavedData();
-          }
-        }
         // notify on successful send for components that want to do
         // work, like save any new contacts.
         updateChromeStatus(SHARE_DONE);
@@ -489,7 +422,8 @@ function (require,   $,        object,         fn,
             PanelCtor = require('widgets/ServicePanel');
             accountPanel = new PanelCtor({
               options: options,
-              owaservice: thisSvc
+              owaservice: thisSvc,
+              savedState: accountPanelsRestoreState[appid]
             }, fragment);
 
             accountPanel.node.setAttribute("id", tabId);
@@ -497,16 +431,13 @@ function (require,   $,        object,         fn,
           }
         });
         finishCreate();
+        accountPanelsRestoreState = {};
       });
     });
   }
 
-  function updateAccounts() {
-    dispatch.pub('optionsChanged', options);
-  }
-
   // Set up initialization work for the first share state passing.
-  onFirstShareState = function () {
+  function onFirstShareState() {
     // Wait until DOM ready to start the DOM work.
     $(function () {
 
@@ -656,7 +587,7 @@ function (require,   $,        object,         fn,
     $("#tabs").empty();
     $("#tabContent").empty();
     for (var appid in accountPanels) {
-      accountPanels[appid].saveData();
+      accountPanelsRestoreState[appid] = accountPanels[appid].getRestoreState();
     }
     accountPanels = {};
   };
@@ -754,13 +685,13 @@ function (require,   $,        object,         fn,
           success: function(result) {
             thisSvc.characteristics = result;
             _fetchLoginInfo(thisSvc, function() {
-              dispatch.pub('optionsChanged', options);
+              dispatch.pub('serviceChanged', thisSvc.app.app);
             });
           },
           error: function(err) {
             dump("failed to get owa characteristics: " + err + "\n");
             _fetchLoginInfo(thisSvc, function() {
-              dispatch.pub('optionsChanged', options);
+              dispatch.pub('serviceChanged', thisSvc.app.app);
             });
           }
         });
@@ -780,7 +711,4 @@ function (require,   $,        object,         fn,
   }, false);
 
 ***/
-
-  // Trigger a call for the first share state.
-  dispatch.pub('panelReady', null);
 });

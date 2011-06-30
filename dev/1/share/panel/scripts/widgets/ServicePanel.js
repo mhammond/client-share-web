@@ -61,24 +61,28 @@ function (object,         Widget,         $,        template,
       template: template,
 
       onCreate: function () {
-        //Listen for options changes and update the account.
-        this.optionsChangedSub = dispatch.sub('optionsChanged', fn.bind(this, function (options) {
-          this.options = options;
-          this.optionsChanged();
+        //Listen for changes to the service state and update the UI.
+        this.serviceChangedSub = dispatch.sub('serviceChanged', fn.bind(this, function (which) {
+          if (which === this.owaservice.app.app) {
+            this.serviceChanged();
+          }
         }));
       },
 
       destroy: function () {
-        dispatch.unsub(this.optionsChangedSub);
+        dispatch.unsub(this.serviceChangedSub);
+        if (this.accountPanel) {
+          this.accountPanel.destroy();
+        }
         parent(this, 'destroy');
       },
 
       onRender: function () {
-        this.optionsChanged();
+        this.serviceChanged();
       },
 
-      //The page options have changed, update the relevant HTML bits.
-      optionsChanged: function () {
+      //The service state has changed, update the relevant HTML bits.
+      serviceChanged: function () {
         // If either 'characteristics' or 'login' are null, we are waiting
         // for those methods to return.
         var showPanel = false;
@@ -105,7 +109,8 @@ function (object,         Widget,         $,        template,
             var PanelCtor = require('widgets/AccountPanel');
             this.accountPanel = new PanelCtor({
                 options: this.options,
-                owaservice: this.owaservice
+                owaservice: this.owaservice,
+                savedState: this.savedState
                 }, thisPanelDiv[0]);
             if (this.accountPanel.asyncCreate) {
               this.accountPanel.asyncCreate.then(function(){
@@ -137,17 +142,10 @@ function (object,         Widget,         $,        template,
         win.focus();
       },
 
-      saveData: function() {
-        if (this.accountPanel) {
-          this.accountPanel.saveData();
-        }
-      },
-
-      clearSavedData: function() {
-        if (this.accountPanel) {
-          this.accountPanel.clearSavedData();
-        }
+      getRestoreState: function () {
+        return this.accountPanel ? this.accountPanel.getRestoreState() : null;
       }
+
     };
   });
 });

@@ -26,15 +26,14 @@
 "use strict";
 
 define([ 'blade/object', 'blade/Widget', 'jquery', 'text!./AccountPanel.html',
-         'TextCounter', 'storage', 'module', 'dispatch', 'accounts',
+         'TextCounter', 'module', 'dispatch', 'accounts',
          'require', 'AutoComplete', 'rdapi', 'blade/fn', './jigFuncs', 'Select',
          'jquery.textOverflow'],
 function (object,         Widget,         $,        template,
-          TextCounter,   storage,   module,   dispatch,   accounts,
+          TextCounter,   module,   dispatch,   accounts,
           require,   AutoComplete,   rdapi,   fn,         jigFuncs,     Select) {
 
-  var store = storage(),
-      className = module.id.replace(/\//g, '-');
+  var className = module.id.replace(/\//g, '-');
 
   //Set up event handlers.
   $(function () {
@@ -81,77 +80,49 @@ function (object,         Widget,         $,        template,
         //Set up the svcAccount property
         this.svcAccount = profile;
         this.svc = this.owaservice.characteristics;
-        this.storeId = 'AccountPanel-' + this.owaservice.app;
 
-        //Set up memory store for when user switches tabs, their messages for
-        //old URLs is retained in case they are doing a composition.
-        //This needs to be in onCreate and not
-        //on the prototype since each instance should get its own object.
-        this.memStore = {};
+        //Set up the photo property
+        this.photo = profile.photos && profile.photos[0] && profile.photos[0].value;
 
-        //Check for saved data. Only use if the URL
-        //and the account match
-        store.get(this.storeId, fn.bind(this, function (savedOptions) {
-          if (savedOptions) {
-            if (this.theGameHasChanged(savedOptions)) {
-              this.clearSavedData();
-              savedOptions = null;
-            } else {
-              //Mix in the savedOptions with options.
-              this.options = object.create(this.options, [savedOptions]);
-            }
-          }
+        //Set up nicer display name
+        // XXX for email services, we should show the email account, but we
+        // cannot rely on userid being a 'pretty' name we can display
+        name = this.svcAccount.username;
+        if (!name) {
+          name = profile.displayName;
+        }
 
-          //Set up the photo property
-          this.photo = profile.photos && profile.photos[0] && profile.photos[0].value;
+        this.displayName = name;
 
-          //Set up nicer display name
-          // XXX for email services, we should show the email account, but we
-          // cannot rely on userid being a 'pretty' name we can display
-          name = this.svcAccount.username;
-          if (!name) {
-            name = profile.displayName;
-          }
+        // Figure out what module will handle contacts.
+        this.contactsName = (this.svc.overlays &&
+                                this.svc.overlays[this.contactsName]) ||
+                                this.contactsName;
 
-          this.displayName = name;
-
-          // Figure out what module will handle contacts.
-          this.contactsName = (this.svc.overlays &&
-                                  this.svc.overlays[this.contactsName]) ||
-                                  this.contactsName;
-
-          //Listen for options changes and update the account.
-          this.optionsChangedSub = dispatch.sub('optionsChanged', fn.bind(this, function (options) {
-            this.options = options;
-            this.optionsChanged();
-          }));
-
-          //Listen for updates to base64Preview
-          this.base64PreviewSub = dispatch.sub('base64Preview', fn.bind(this, function (dataUrl) {
-            $('[name="picture_base64"]', this.node).val(jigFuncs.rawBase64(dataUrl));
-          }));
-
-          // listen for successful send, and if so, update contacts list, if
-          // the send matches this account.
-          this.sendCompleteSub = dispatch.sub('sendComplete', fn.bind(this, function (data) {
-            var acct = this.svcAccount;
-            if (data.to && acct.domain === data.domain &&
-                acct.userid === data.userid &&
-                acct.username === data.username) {
-              this.contacts.incorporate(data.to);
-            }
-          }));
-
-          // indicate async creation is done.
-          onFinishCreate.resolve();
+        //Listen for updates to base64Preview
+        this.base64PreviewSub = dispatch.sub('base64Preview', fn.bind(this, function (dataUrl) {
+          $('[name="picture_base64"]', this.node).val(jigFuncs.rawBase64(dataUrl));
         }));
 
+        // listen for successful send, and if so, update contacts list, if
+        // the send matches this account.
+        this.sendCompleteSub = dispatch.sub('sendComplete', fn.bind(this, function (data) {
+          var acct = this.svcAccount;
+          if (data.to && acct.domain === data.domain &&
+              acct.userid === data.userid &&
+              acct.username === data.username) {
+            this.contacts.incorporate(data.to);
+          }
+        }));
+
+        // indicate async creation is done.
+        onFinishCreate.resolve();
         // return onFinishCreate to indicate this is an async creation
+        // XXX - actually this no longer *is* async, so we can drop this...
         return onFinishCreate;
       },
 
       destroy: function () {
-        dispatch.unsub(this.optionsChangedSub);
         dispatch.unsub(this.base64PreviewSub);
         dispatch.unsub(this.sendCompleteSub);
         this.select.dom.unbind('change', this.selectChangeFunc);
@@ -162,11 +133,39 @@ function (object,         Widget,         $,        template,
       },
 
       onRender: function () {
-        var acNode;
+        var acNode,
+            root = $(this.node),
+            opts = this.options,
+            formLink = jigFuncs.link(opts);
 
         // Hold onto nodes that are used frequently
         this.toDom = $('[name="to"]', this.node);
         this.shareButtonNode = $('button.share', this.node)[0];
+
+        //Mix in any saved data for the new URL if it was in storage.
+        if (this.savedState) {
+          //Create a temp object so we do not mess with pristine options.
+          opts = object.create(opts, [{
+            to: this.savedState.to,
+            subject: this.savedState.subject,
+            message: this.savedState.message,
+            shareType: this.savedState.shareType
+          }]);
+        }
+
+        //Update the DOM.
+        root.find('[name="picture"]').val(jigFuncs.preview(opts));
+        root.find('[name="picture_base64"]').val(jigFuncs.preview_base64(opts));
+        root.find('[name="link"]').val(formLink);
+        root.find('[name="title"]').val(opts.title);
+        root.find('[name="caption"]').val(opts.caption);
+        root.find('[name="description"]').val(opts.description);
+        root.find('[name="medium"]').val(opts.medium);
+        root.find('[name="source"]').val(opts.source);
+
+        this.toDom.val(opts.to);
+        root.find('[name="subject"]').val(opts.subject);
+        root.find('[name="message"]').val(opts.message);
 
         if (this.svc.shareTypes.length > 1) {
           //Insert a Select widget if it is desired.
@@ -216,41 +215,6 @@ function (object,         Widget,         $,        template,
 
         //Create ellipsis for anything wanting ... overflow
         $(".overflow", this.node).textOverflow();
-      },
-
-      //Tron Legacy soundtrack anyone?
-      theGameHasChanged: function (data) {
-        //If the account/url has changed the data should no
-        //longer be tracked.
-        //Convert svcAccount fields to strings because the
-        //form data will be in strings, even though the
-        //account data can have things like integers, and want
-        //string equality operators to stay for linting.
-        return data.link !== jigFuncs.link(this.options) ||
-              data.userid !== String(this.svcAccount.userid) ||
-              data.username !== String(this.svcAccount.username);
-      },
-
-      clearSavedData: function () {
-        this.memStore = {};
-        store.remove(this.storeId);
-
-        //Also clear up the form data (but note this may be called before
-        // we have been rendered, so some nodes may not yet exist)
-        var root = $(this.node);
-        if (this.toDom) {
-          this.toDom.val('');
-        }
-        root.find('[name="subject"]').val('');
-        root.find('[name="message"]').val('');
-        if (this.svc.textLimit) {
-          root.find('.counter').html('');
-        }
-      },
-
-      saveData: function () {
-        var data = this.getFormData();
-        store.set(this.storeId, data);
       },
 
       validate: function (sendData) {
@@ -331,72 +295,8 @@ function (object,         Widget,         $,        template,
         $('.status', this.node).hide();
       },
 
-      //The page options have changed, update the relevant HTML bits.
-      optionsChanged: function () {
-        var root = $(this.node),
-            opts = this.options,
-            formLink = jigFuncs.link(opts),
-            oldData = this.getFormData(),
-            restoredData;
-
-        //Save off previous form data for old URL.
-        if (oldData.to || oldData.message || oldData.subject) {
-          this.memStore[oldData.link] = oldData;
-        }
-
-        //Get any data to restore. Do this after saving the oldData
-        //since it could be that we are on the same URL and it is the first
-        //refresh to this URL.
-        restoredData = this.memStore[formLink];
-
-        //Delete memory data for current URL if the account changed.
-        if (restoredData && this.theGameHasChanged(restoredData)) {
-          restoredData = null;
-          delete this.memStore[formLink];
-        }
-
-        //Mix in any saved data for the new URL if it was in storage.
-        if (restoredData) {
-          //Create a temp object so we do not mess with pristine options.
-          opts = object.create(opts, [{
-            to: restoredData.to,
-            subject: restoredData.subject,
-            message: restoredData.message,
-            shareType: restoredData.shareType
-          }]);
-        }
-
-        //Update the DOM.
-        root.find('[name="picture"]').val(jigFuncs.preview(opts));
-        root.find('[name="picture_base64"]').val(jigFuncs.preview_base64(opts));
-        root.find('[name="link"]').val(formLink);
-        root.find('[name="title"]').val(opts.title);
-        root.find('[name="caption"]').val(opts.caption);
-        root.find('[name="description"]').val(opts.description);
-        root.find('[name="medium"]').val(opts.medium);
-        root.find('[name="source"]').val(opts.source);
-
-        //Only set share types if they are available for this type of account.
-        if (this.select) {
-
-          if (opts.shareType) {
-            this.select.val(opts.shareType);
-            this.changeShareType(this.getShareType(opts.shareType));
-          } else {
-            this.selectFirstShareType();
-          }
-        }
-
-        this.toDom.val(opts.to);
-        root.find('[name="subject"]').val(opts.subject);
-        root.find('[name="message"]').val(opts.message);
-
-        // update text limit for the text counter, if enabled.
-        if (this.counter) {
-          this.updateCounter();
-        }
-
-        return opts;
+      getRestoreState: function () {
+        return this.getFormData();
       },
 
       getFormData: function () {
