@@ -1,8 +1,1 @@
-<!-- Ack - We used to use a background-image style, but that makes it hard
-     to resize the image, and we can't know exactly what size the apps will
-     send us - so markh fell back to an img -->
-<a href="#{target}"
-   class="{type} {className}"
-   title="{title}">{name}
-    <img src="{serviceIcon}" width="24" height="24">
-</a>
+<a href="#{target}" id="{type}" class="{type} icon {className}" title="{title}" style="background-image: url({serviceIcon})">{name}</a>
